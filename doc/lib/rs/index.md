@@ -34,6 +34,14 @@ The reference implementation. Every crate is on
 ## Quick start
 
 `moq-tokio` configures the endpoint; `moq-net` does the protocol.
+`moq-native` is a tombstone: replace `moq-native` with `moq-tokio` in
+`Cargo.toml` and `moq_native` with `moq_tokio` in source. There is no
+compatibility shim.
+
+A hang catalog or live stats track is `moq_json::snapshot`; a retained
+rollup is `moq_json::window`. Subscribe with
+`broadcast.track(name)?.subscribe(...)`, then the JSON consumer, not a
+generic frame reader.
 
 ```rust
 // The Origin is the local hub: the session fills it with remote broadcasts

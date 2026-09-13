@@ -57,7 +57,11 @@ React and Solid adapters for the reactive state.
 Below the elements, `Watch.Broadcast` and `Publish.Broadcast` are the same
 pipelines without DOM, and `@moq/net` is the protocol itself. Examples:
 [`js/net/examples/`](https://github.com/moq-dev/moq/tree/main/js/net/examples)
-covers connecting, publishing, subscribing, and discovery.
+covers connecting, publishing, subscribing, and discovery. The reconnecting
+`Connection` handle, catalog Snapshot reads, and stats Snapshot versus Window
+are covered by [moq-dev/smoke](https://github.com/moq-dev/smoke)'s from-dev
+channel (`./dev.sh`). See also the [net](/lib/js/net#migrating) and
+[hang](/lib/js/hang#migrating) migration notes.
 
 ## Browser support
 

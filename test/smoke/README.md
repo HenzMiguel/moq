@@ -10,6 +10,12 @@ from the workspace source (`cargo`, `bun`, `uv`, `cc`) to catch *interop*
 regressions before anything is published. No apt/brew/npm/PyPI, and no
 distribution-mechanism matrix.
 
+The unpublished `dev` API (reconnecting `Connection`, catalog Snapshot
+deltas, stats Snapshot versus Window) is proven by smoke's **from-dev**
+channel (`./dev.sh` in that repo), which consumes this checkout or git
+`dev` instead of npm/crates.io latest. Embedded relay routes live in
+`rs/moq-relay/tests/embed.rs`, not in smoke.
+
 It stands up a `moq-relay`, then for each publisher language publishes an H.264
 broadcast and confirms every subscriber sees data flowing before the timeout.
 Most subscribers check for a non-empty frame. The browser additionally verifies

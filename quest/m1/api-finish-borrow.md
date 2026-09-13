@@ -62,4 +62,4 @@ then `just test smoke-full` because `moq-ffi` behavior changes.
 
 ## Related
 
-- [External API proof](/quest/m1/api-release-proof.md) - records this disposition
+- [Merge dev](/quest/m1/merge-dev.md) - records this disposition

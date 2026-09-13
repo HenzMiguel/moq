@@ -45,10 +45,28 @@ merge for it. The rest of the archive line, wildcard resolution, and every
 additive quest that builds on dev-only code start on main afterwards from
 [m2](/quest/m2/README.md).
 
+The 2026-09-12 external API audit is closed. Proof is
+[moq-dev/smoke](https://github.com/moq-dev/smoke) `./dev.sh` (unpublished
+`dev` checkout, not crates.io/npm latest) plus
+`rs/moq-relay/tests/embed.rs` for custom routes and origin workers.
+Embedding ownership of `workers`/`uring` stays on
+[Relay embedding](/quest/m1/api-relay-embedding.md).
+
+| Finding | Disposition | Revision |
+|---|---|---|
+| FFI pending reads serialize independent datagram/group lanes | Fixed: independent group and datagram lanes | `1f7b2b45b` (#3651) |
+| Shared/private connections disagree on credential-refresh recovery and terminal state | Fixed: one URL-recovery contract, `closed` is handle disposal | `b5a289a05` (#3636) |
+| Relay embedding can discard newly added socket owners without a compile error | Deferred to [Embedding](/quest/m1/api-relay-embedding.md); `tests/embed.rs` covers routes and origin workers on the current load API | open |
+| FFI first-frame convenience treats empty groups as EOF and loses an acquired group on cancellation | Deferred to [Frame cursor](/quest/m1/api-ffi-frame-cursor.md) | open |
+| JSON/binary readers hide the subscription cleanup handle | Abandoned: finish must be `&mut` so abort can follow | `a8dbf886d` (#3637) |
+| Local inclusive ends cannot express the empty exclusive range | Deferred to [Bounds](/quest/m1/api-subscription-bounds.md) | open |
+| Typed Getter input can be rejected solely for lacking an internal brand | Fixed: `getter()` reuses any conforming Getter | `26b505995` (#3639) |
+| JSON edit guard logs failed implicit publication | Fixed: `modify` refuses a closed track, a failed drop aborts it | `ff45019fc` (#3644) |
+| Terminal publisher methods inconsistently retain the caller's handle | Deferred to [Finish borrows](/quest/m1/api-finish-borrow.md) | open |
+
 ## Required
 
 - [m0](/quest/m0/README.md) - every release blocker lands or is punted before the merge
-- [External API proof](/quest/m1/api-release-proof.md) - the packaged consumer fixture and explicit fix/deferral decisions must be recorded before merge
 - [Monotonic timeline](/quest/m1/monotonic-timeline.md) - so a shed marker still jumps the playhead on a timestamp hole (#3291)
 - [Wildcard docs](/quest/m1/wildcard-docs.md) - the release that follows ships pattern advertisements, so their docs ship in it
 

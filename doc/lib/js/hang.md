@@ -22,3 +22,23 @@ import * as Container from "@moq/hang/container";
 Most apps never import it directly; the elements and `Broadcast` classes in
 the watch and publish packages do. Reach for it when hand-rolling a catalog
 or building a custom player.
+
+## Migrating
+
+A hang catalog is a JSON **Snapshot**, not one full root per frame. Read it
+with `Json.Snapshot.Consumer` and `Catalog.RootSchema`, the way
+`@moq/watch` does:
+
+```ts
+const track = broadcast.track(Catalog.TRACK).subscribe({ priority: Catalog.PRIORITY.catalog });
+const catalog = new Json.Snapshot.Consumer<Catalog.Root>({
+    track,
+    schema: Catalog.RootSchema,
+});
+const root = await catalog.next();
+```
+
+Frame 0 of a group is a full catalog; later frames are RFC 7396 merge patches.
+`JSON.parse` plus `RootSchema` on every frame is the old consumer and rejects
+the deltas. Compressed catalogs use `Catalog.TRACK_COMPRESSED` and
+`compression: true` on the same consumer.

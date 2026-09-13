@@ -47,6 +47,19 @@ Every option is also a `--flag` or `MOQ_*` environment variable, and
 [`demo/relay/`](https://github.com/moq-dev/moq/tree/main/demo/relay) has
 working configs for development, production, and a cluster.
 
+## Embedding
+
+`Relay::load` is the embedder API: it binds listeners, resolves auth, and
+builds the cluster. Mount extra routes on `web.routes()` and publish from
+application workers on `cluster.origin`. `rs/moq-relay/tests/embed.rs` is
+the small public example (custom `/app` plus an origin worker).
+
+`Relay` is `#[non_exhaustive]`. Destructure with `..`. Dropping `workers`
+or `uring` releases the QUIC port while the rest still compiles; keep those
+fields if `runtime.workers` is set. An owning runner for that hazard is
+the relay-embedding quest on `dev`. Embedding is not a
+[moq-dev/smoke](https://github.com/moq-dev/smoke) client.
+
 ## Operate
 
 | Task | Guide |

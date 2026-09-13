@@ -50,3 +50,28 @@ Examples in
 [`js/net/examples/`](https://github.com/moq-dev/moq/tree/main/js/net/examples).
 Runs in the browser and, over WebSocket, in Node, Bun, and Deno; see
 [server-side](/lib/js/#server-side).
+
+The unpublished `dev` surface is proven by the from-dev channel in
+[moq-dev/smoke](https://github.com/moq-dev/smoke) (`./dev.sh`), not by an
+in-tree packaged fixture.
+
+## Migrating
+
+- **`Connection.Reload` / `Connection.Shared` are gone.** `new Connection({ url })`
+  is the reconnecting handle: one origin and one reconnect loop per relay URL.
+  `Connection.connect` is still the one-shot session. `closed` settles when
+  *this handle* is released, not when a session drops. The failure that stopped
+  retrying the current URL is `error`; `url.set(next)` recovers the same handle
+  (credential refresh).
+- **Do not call `consume` on the reconnecting handle.** `Established.consume(path)`
+  stays on a one-shot session. A `Connection` exposes `origin`; resolve with
+  `origin.request(path)` (swaps on a republish) and discover with
+  `connection.announced(prefix)`. Announce events carry `pattern`, not `path`.
+- **`broadcast.track(name).subscribe(opts)` is the public read.**
+  `broadcast.subscribe(name)` is the wire-layer helper. Hang catalog reads go
+  through the track handle, then `ordered()` when a codec needs sequence order.
+  `ordered()` takes the subscription over: `recvGroup` throws afterwards.
+- **JSON is three modes**, in [`@moq/json`](https://www.npmjs.com/package/@moq/json):
+  `Snapshot` (lossy latest-value, merge-patch deltas), `Stream` (lossless
+  append-log), `Window` (retained range). Pick the mode; do not parse every
+  frame as a full document. Live stats are Snapshot. Billing rollups are Window.

@@ -7,12 +7,13 @@
 [![npm version](https://img.shields.io/npm/v/@moq/json)](https://www.npmjs.com/package/@moq/json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-ready-blue.svg)](https://www.typescriptlang.org/)
 
-JSON publishing over [Media over QUIC](https://moq.dev/) tracks, in two modes:
+JSON publishing over [Media over QUIC](https://moq.dev/) tracks, in three modes:
 
-- **`Snapshot`**: lossy. One JSON value updated over time; a consumer only gets the most recent value. Intermediate updates are collapsed and older groups are dropped.
+- **`Snapshot`**: lossy. One JSON value updated over time; a consumer only gets the most recent value. Intermediate updates are collapsed and older groups are dropped. Hang catalogs and live stats use this.
 - **`Stream`**: lossless. An ordered append-log of self-contained records; every record is preserved and delivered in order, nothing is ever superseded.
+- **`Window`**: a bounded run of records, appended to the back and dropped from the front. A late reader is restated what is still retained (billing rollups).
 
-Pick `Snapshot` when consumers care about "what is the value now" (a catalog, a status document) and `Stream` when they care about every record (an event log, a media timeline).
+Pick `Snapshot` when consumers care about "what is the value now", `Stream` when they care about every record of an unbounded log, and `Window` when old records retire. Do not parse every Snapshot frame as a full document: frame 0 is a snapshot and later frames are RFC 7396 merge patches.
 
 ## Quick Start
 
