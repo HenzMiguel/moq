@@ -9,9 +9,16 @@ Your goal is to execute and/or plan quests in parallel.
 
 The scope consists of all unblocked quests that are not claimed and have no blockers.
 Use the argument (if provided) to filter to specific quests/questlines.
-Report which quests are not ready to be worked on and why.
 
-For each quest, interactively prompt the user if:
+`quest ready` is mechanical over the tree. Reinspect every blocker it prints before treating a quest as not-ready:
+- The linked quest still exists and its work has not already landed.
+- A plain-text Required is still true; check the environment.
+- The blocker is a real prerequisite of this quest's goal.
+- The blocker is not in a later milestone than this quest.
+
+A stale or invalid blocker is a quest-tree defect. Prompt to drop it, retarget it, or move the quest, with a recommended fix, and land that in the quest PR. Report as not-ready only the quests whose blockers survive that inspection.
+
+For each unblocked unclaimed quest, interactively prompt the user if:
 
 1. /start-quest
 2. /plan-quests
