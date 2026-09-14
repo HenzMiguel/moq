@@ -16,22 +16,25 @@ fn main() -> anyhow::Result<()> {
 	println!("Public key (give this to the relay):\n{}\n", public_key.to_str()?);
 
 	// Sign a token with the private key.
-	let claims = moq_token::Claims::default()
-		.with_root("rooms/meeting-123")
-		.with_publish(["alice"])
-		.with_subscribe([""])
-		.with_expires(SystemTime::now() + Duration::from_secs(3600))
-		.with_issued(SystemTime::now());
+	let claims = moq_token::Claims::V0(
+		moq_token::ClaimsV0::default()
+			.with_root("rooms/meeting-123")
+			.with_publish(["alice"])
+			.with_subscribe([""])
+			.with_expires(SystemTime::now() + Duration::from_secs(3600))
+			.with_issued(SystemTime::now()),
+	);
 
 	let token = private_key.sign(&claims)?;
 	println!("Signed token:\n{token}\n");
 
 	// Verify with the public key (this is what the relay does).
 	let verified = public_key.verify(&token)?;
+	let verified_v0 = verified.as_v0().expect("v0 token");
 	println!("Verified with public key:");
-	println!("  root: {}", verified.root);
-	println!("  publish: {:?}", verified.publish);
-	println!("  subscribe: {:?}", verified.subscribe);
+	println!("  root: {}", verified.root());
+	println!("  publish: {:?}", verified_v0.publish);
+	println!("  subscribe: {:?}", verified_v0.subscribe);
 
 	Ok(())
 }

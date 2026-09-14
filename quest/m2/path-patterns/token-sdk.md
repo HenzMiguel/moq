@@ -33,5 +33,3 @@ release clearly in the PR and migration documentation.
 - A subsequent breaking dev release cycle is open and includes the v1 relay reader; this default switch must not target main.
 
 - [Relay auth](/quest/m2/path-patterns/relay-auth.md) - the in-tree reader accepts v1 before issuers default to it
-
-- [Claims](/quest/m1/api-token-claims.md)

@@ -52,6 +52,11 @@ after which it can never sign a broader token.
 | `get` | Subscribe suffixes under `root`. Same rules. |
 | `exp`, `iat` | Expiry and issue time. `exp` is enforced for the whole session, not just at connect. |
 
+The relay verifies v0 prefix claims. The Rust and TypeScript libraries also
+sign, verify, and authorize `v: 1` claims carrying exact `publish`/`subscribe`
+patterns (for example `{"v":1,"root":"pid","publish":["*/chat"],"subscribe":["**/*.hang"]}`),
+with versioned key scopes; issuers stay on v0 until the relay reads patterns.
+
 ### Path matching
 
 Grants are `root/suffix`, matched on path boundaries (`foo` covers `foo/bar`

@@ -13,8 +13,8 @@ it in an auth service that mints tokens for clients, or in your own server
 that wants the relay's path rules.
 
 - **Keys**: generate HS256/384/512, RS256/384/512, PS256/384/512, ES256/384, or EdDSA keys as JWKs, with a `kid` for rotation and an optional immutable scope that caps every token the key signs.
-- **Claims**: `root`, `put`, `get`, `exp`, `iat`. `Key::sign` and `Key::verify` handle the signature and expiry.
-- **Authorization**: `Claims::authorize(path)` scopes verified claims to the path a client dialed and returns the publish and subscribe prefixes, exactly as the relay does. [`Pattern`](https://docs.rs/moq-pattern) is re-exported for standalone use; token claims still use path prefixes.
+- **Claims**: v0 `root`, `put`, `get`, `exp`, `iat`, or `v: 1` with `root`, `publish`, `subscribe` patterns, `exp`, `iat`. `Key::sign` and `Key::verify` handle the signature and expiry.
+- **Authorization**: `Claims::authorize(path)` scopes verified claims to the path a client dialed and returns the publish and subscribe residuals, exactly as the relay does for v0. [`Pattern`](https://docs.rs/moq-pattern) is re-exported for standalone use; v1 claims and key scopes carry exact pattern sets.
 
 ```bash
 cargo add moq-token

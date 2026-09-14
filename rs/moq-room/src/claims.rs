@@ -6,17 +6,19 @@
 /// Token claims for a participant in `room`.
 ///
 /// `root` is the room prefix, `subscribe` is `[""]` (everything under the room),
-/// and `publish` is `["<identity>/"]` so a participant cannot publish at anyone
-/// else's paths.
+/// and `publish` is `["<identity>"]` so a participant cannot publish at anyone
+/// else's paths. Prefixes normalize, so boundary slashes are implicit.
 pub fn claims(room: impl Into<String>, identity: &str) -> Result<moq_token::Claims, crate::Error> {
 	let identity = moq_net::Path::new(identity);
 	if identity.is_empty() {
 		return Err(crate::Error::EmptyIdentity);
 	}
-	Ok(moq_token::Claims::default()
-		.with_root(room)
-		.with_subscribe([""])
-		.with_publish([format!("{identity}/")]))
+	Ok(moq_token::Claims::V0(
+		moq_token::ClaimsV0::default()
+			.with_root(room)
+			.with_subscribe([""])
+			.with_publish([format!("{identity}/")]),
+	))
 }
 
 #[cfg(test)]
@@ -33,20 +35,23 @@ mod tests {
 	#[test]
 	fn claims_root_the_token_and_scope_put_to_identity() {
 		let c = claims("meet/demo", "alice").unwrap();
-		assert_eq!(c.root, "meet/demo");
-		assert_eq!(c.subscribe, [""]);
-		assert_eq!(c.publish, ["alice/"]);
+		let v0 = c.as_v0().expect("v0 token");
+		assert_eq!(v0.root, "meet/demo");
+		assert_eq!(v0.subscribe, [""]);
+		assert_eq!(v0.publish, ["alice"]);
 	}
 
 	#[test]
 	fn claims_does_not_double_a_trailing_slash() {
-		assert_eq!(claims("meet/demo", "alice/").unwrap().publish, ["alice/"]);
+		let c = claims("meet/demo", "alice/").unwrap();
+		assert_eq!(c.as_v0().expect("v0 token").publish, ["alice"]);
 	}
 
 	#[test]
 	fn claims_accepts_a_multi_segment_identity() {
 		let c = claims("hang/room", "guest/uuid").unwrap();
-		assert_eq!(c.root, "hang/room");
-		assert_eq!(c.publish, ["guest/uuid/"]);
+		let v0 = c.as_v0().expect("v0 token");
+		assert_eq!(v0.root, "hang/room");
+		assert_eq!(v0.publish, ["guest/uuid"]);
 	}
 }

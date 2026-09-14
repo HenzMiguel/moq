@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { authorize } from "./claims.ts";
+import * as base64 from "@hexagon/base64";
+import { authorize, type ClaimsV0 } from "./claims.ts";
 import { generate } from "./generate.ts";
 import { load, loadPublic, sign, verify } from "./key.ts";
 import { findKey, loadSet, verifyWith } from "./set.ts";
@@ -62,16 +63,16 @@ describe("Rust-generated fixtures", () => {
 		const key = load(RUST_HS256_KEY);
 		const claims = await verify(key, RUST_HS256_TOKEN);
 		expect(claims.root).toBe("demo");
-		expect(claims.put).toEqual(["alice"]);
-		expect(claims.get).toEqual(["bob"]);
+		expect((claims as ClaimsV0).put).toEqual(["alice"]);
+		expect((claims as ClaimsV0).get).toEqual(["bob"]);
 	});
 
 	test("verify Rust HS256 token scoped to the root path", async () => {
 		const key = load(RUST_HS256_KEY);
 		const claims = await verify(key, RUST_HS256_TOKEN_EMPTY_ROOT);
 		expect(claims.root).toBe("");
-		expect(claims.put).toEqual(["alice"]);
-		expect(claims.get).toEqual(["bob"]);
+		expect((claims as ClaimsV0).put).toEqual(["alice"]);
+		expect((claims as ClaimsV0).get).toEqual(["bob"]);
 
 		// An empty root grants its prefixes wherever the connection lands.
 		expect(authorize(claims, "alice")).toEqual({ subscribe: [], publish: [""] });
@@ -82,8 +83,8 @@ describe("Rust-generated fixtures", () => {
 		const token = await sign(key, { root: "js-test", put: ["pub1"], get: ["sub1"] });
 		const claims = await verify(key, token);
 		expect(claims.root).toBe("js-test");
-		expect(claims.put).toEqual(["pub1"]);
-		expect(claims.get).toEqual(["sub1"]);
+		expect((claims as ClaimsV0).put).toEqual(["pub1"]);
+		expect((claims as ClaimsV0).get).toEqual(["sub1"]);
 	});
 
 	test("load Rust EdDSA keys", () => {
@@ -102,15 +103,15 @@ describe("Rust-generated fixtures", () => {
 		const token = await sign(privateKey, { root: "js-eddsa", put: ["test"] });
 		const claims = await verify(publicKey, token);
 		expect(claims.root).toBe("js-eddsa");
-		expect(claims.put).toEqual(["test"]);
+		expect((claims as ClaimsV0).put).toEqual(["test"]);
 	});
 
 	test("verify Rust EdDSA token with public key", async () => {
 		const key = loadPublic(RUST_EDDSA_PUBLIC_KEY);
 		const claims = await verify(key, RUST_EDDSA_TOKEN);
 		expect(claims.root).toBe("room");
-		expect(claims.put).toEqual(["stream1", "stream2"]);
-		expect(claims.get).toEqual(["feed1"]);
+		expect((claims as ClaimsV0).put).toEqual(["stream1", "stream2"]);
+		expect((claims as ClaimsV0).get).toEqual(["feed1"]);
 	});
 
 	// cargo run --bin moq-token -- generate --root project --publish live --subscribe watch --out /tmp/scoped.jwk
@@ -135,8 +136,8 @@ describe("Rust-generated fixtures", () => {
 	test("verify a Rust token signed within its key scope", async () => {
 		const key = load(RUST_SCOPED_KEY);
 		const claims = await verify(key, RUST_SCOPED_TOKEN);
-		expect(claims.put).toEqual(["live/room"]);
-		expect(claims.get).toEqual(["watch"]);
+		expect((claims as ClaimsV0).put).toEqual(["live/room"]);
+		expect((claims as ClaimsV0).get).toEqual(["watch"]);
 	});
 
 	test("JS enforces the same scope Rust does", async () => {
@@ -150,8 +151,8 @@ describe("Rust-generated fixtures", () => {
 		// is not compared: JS orders the header differently and stamps `iat`.
 		const token = await sign(key, { root: "project", put: ["live/room"], get: ["watch"] });
 		const claims = await verify(key, token);
-		expect(claims.put).toEqual(["live/room"]);
-		expect(claims.get).toEqual(["watch"]);
+		expect((claims as ClaimsV0).put).toEqual(["live/room"]);
+		expect((claims as ClaimsV0).get).toEqual(["watch"]);
 	});
 });
 
@@ -192,8 +193,8 @@ describe("Rust-generated JWK Set", () => {
 		const set = loadSet(RUST_JWKS);
 		const claims = await verifyWith(set, RUST_JWKS_TOKEN);
 		expect(claims.root).toBe("demo");
-		expect(claims.put).toEqual(["alice"]);
-		expect(claims.get).toEqual(["bob"]);
+		expect((claims as ClaimsV0).put).toEqual(["alice"]);
+		expect((claims as ClaimsV0).get).toEqual(["bob"]);
 	});
 
 	test("a token whose kid is absent from the Rust JWKS is rejected", async () => {
@@ -247,5 +248,69 @@ describe("wrong key rejects token", () => {
 	test("garbage token is rejected", async () => {
 		const key = load(RUST_HS256_KEY);
 		await expect(verify(key, "not-a-jwt")).rejects.toThrow();
+	});
+});
+
+describe("v1 pattern claims", () => {
+	// Fixed HS256 key and v1 token shared with rs/moq-token/src/key.rs
+	// test_v1_fixture_token. No exp/iat so HS256 signing is deterministic.
+	const V1_KEY = JSON.stringify({
+		kty: "oct",
+		alg: "HS256",
+		key_ops: ["sign", "verify"],
+		k: "dGVzdC1zZWNyZXQtdGhhdC1pcy1sb25nLWVub3VnaC1mb3ItaG1hYy1zaGEyNTY",
+		kid: "v1-fixture",
+	});
+	const V1_TOKEN =
+		"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6InYxLWZpeHR1cmUifQ.eyJ2IjoxLCJyb290IjoicGlkIiwicHVibGlzaCI6WyIqL2NoYXQiXSwic3Vic2NyaWJlIjpbIioqLyouaGFuZyJdfQ.1QEi35x3Nr60fhRTYfxtVwWuoVT2_VQ4pwdKLqvCHZY";
+
+	test("verify the Rust-signed v1 fixture", async () => {
+		const key = load(V1_KEY);
+		const claims = await verify(key, V1_TOKEN);
+		if (!("v" in claims) || claims.v !== 1) throw new Error("expected v1 claims");
+		expect(claims.root).toBe("pid");
+		expect(claims.publish).toEqual(["*/chat"]);
+		expect(claims.subscribe).toEqual(["**/*.hang"]);
+		expect(authorize(claims, "pid/alice")).toEqual({ subscribe: ["**/*.hang"], publish: ["chat"] });
+	});
+
+	test("sign a v1 token Rust verifies", async () => {
+		const key = load(V1_KEY);
+		const token = await sign(key, { v: 1, root: "pid", publish: ["*/chat"], subscribe: ["**/*.hang"] });
+		// The encoding is not compared: JS orders the JWT header differently than
+		// Rust, so the signature differs while the payload matches exactly.
+		const [, payloadB64] = token.split(".");
+		const payload = JSON.parse(new TextDecoder().decode(base64.toArrayBuffer(payloadB64, true)));
+		expect(payload).toEqual({ v: 1, root: "pid", publish: ["*/chat"], subscribe: ["**/*.hang"] });
+		const claims = await verify(key, token);
+		if (!("v" in claims) || claims.v !== 1) throw new Error("expected v1 claims");
+		expect(claims.publish).toEqual(["*/chat"]);
+	});
+
+	test("unscoped keys sign v1, legacy scopes sign only v0", async () => {
+		const unrestricted = load(V1_KEY);
+		const v1 = { v: 1 as const, root: "pid", publish: ["alice/chat"] };
+		await expect(sign(unrestricted, v1)).resolves.toBeString();
+
+		const legacy = { ...unrestricted, scope: { root: "pid", put: [""], get: [""] } };
+		await expect(sign(legacy, v1)).rejects.toThrow("exceed the key scope");
+
+		const scoped = { ...unrestricted, scope: { v: 1 as const, root: "pid", publish: ["*/chat"] } };
+		await expect(sign(scoped, v1)).resolves.toBeString();
+		await expect(sign(scoped, { v: 1 as const, root: "pid", publish: ["alice/chat/extra"] })).rejects.toThrow(
+			"exceed the key scope",
+		);
+		await expect(sign(scoped, { root: "pid", put: ["alice/chat"] })).rejects.toThrow("exceed the key scope");
+
+		const forged = await sign(unrestricted, v1);
+		await expect(verify(legacy, forged)).rejects.toThrow("exceed the key scope");
+	});
+
+	test("a v0-only reader grants nothing on a v1 payload", async () => {
+		const key = load(V1_KEY);
+		const claims = await verify(key, V1_TOKEN);
+		// Reading only the v0 fields leaves no grants, so authorization fails closed.
+		const v0view = { root: claims.root } as { root: string; put?: string[]; get?: string[] };
+		expect(() => authorize(v0view, "pid/alice")).toThrow();
 	});
 });

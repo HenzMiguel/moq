@@ -58,11 +58,14 @@ impl Args {
 
 				let mut key = moq_token::Key::generate(algorithm, Some(id.clone()))?;
 				if !publish.is_empty() || !subscribe.is_empty() {
-					key = key.with_scope(moq_token::Scope {
-						root,
-						publish,
-						subscribe,
-					})?;
+					key = key.with_scope(
+						moq_token::ScopeV0 {
+							root,
+							publish,
+							subscribe,
+						}
+						.into(),
+					)?;
 				}
 
 				let public_to_stdout = public.as_deref().is_some_and(is_dash);
@@ -101,12 +104,14 @@ impl Args {
 			} => {
 				let key = read_key(&key)?;
 
-				let payload = moq_token::Claims::default()
-					.with_root(root)
-					.with_publish(publish)
-					.with_subscribe(subscribe)
-					.with_expires(expires.map(Into::into))
-					.with_issued(issued.map(Into::into));
+				let payload = moq_token::Claims::V0(
+					moq_token::ClaimsV0::default()
+						.with_root(root)
+						.with_publish(publish)
+						.with_subscribe(subscribe)
+						.with_expires(expires.map(Into::into))
+						.with_issued(issued.map(Into::into)),
+				);
 
 				let token = key.sign(&payload)?;
 				println!("{token}");
@@ -322,7 +327,9 @@ mod tests {
 		// token itself comes from the library.
 		let token = moq_token::Key::from_file(&private)
 			.unwrap()
-			.sign(&moq_token::Claims::default().with_root("demo").with_publish(["alice"]))
+			.sign(&moq_token::Claims::V0(
+				moq_token::ClaimsV0::default().with_root("demo").with_publish(["alice"]),
+			))
 			.unwrap();
 		let path = dir.path().join("alice.jwt");
 		std::fs::write(&path, &token).unwrap();

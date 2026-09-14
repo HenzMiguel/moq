@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { decodeProtectedHeader } from "jose";
+import type { ClaimsV0 } from "./claims.ts";
 import { generate } from "./generate.ts";
 import { sign } from "./key.ts";
 import { findKey, type KeySet, loadSet, signWith, toPublicSet, verifyWith } from "./set.ts";
@@ -30,7 +31,7 @@ test("signWith / verifyWith - round trip selects the key by kid", async () => {
 	const token = await signWith(set, CLAIMS);
 	const claims = await verifyWith(set, token);
 	expect(claims.root).toBe("demo");
-	expect(claims.put).toEqual(["alice"]);
+	expect((claims as ClaimsV0).put).toEqual(["alice"]);
 });
 
 test("verifyWith - a token signed by a key outside the set is rejected", async () => {

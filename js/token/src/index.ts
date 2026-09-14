@@ -6,7 +6,7 @@
  *
  * See {@link Claims} for the claims structure and {@link Key} for key management.
  * Pattern types from `@moq/pattern` are re-exported for standalone use.
- * Token claims and authorization still use path prefixes.
+ * Unversioned claims use v0 path prefixes; `v: 1` claims use exact patterns.
  *
  * @module
  */

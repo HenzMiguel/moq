@@ -84,6 +84,18 @@ pub enum Error {
 	#[error("token capabilities exceed the key scope")]
 	ScopeExceeded,
 
+	#[error("unsupported token version: {0}")]
+	UnsupportedVersion(u64),
+
+	#[error("token mixes v0 and v1 fields")]
+	MixedClaims,
+
+	#[error("invalid pattern: {0}")]
+	BadPattern(String),
+
+	#[error("invalid root: {0}")]
+	InvalidRoot(String),
+
 	#[error("invalid algorithm: {0}")]
 	InvalidAlgorithm(String),
 
@@ -146,6 +158,7 @@ from_message! {
 	rsa::pkcs1::Error => Crypto,
 	aws_lc_rs::error::Unspecified => Crypto,
 	aws_lc_rs::error::KeyRejected => Crypto,
+	moq_pattern::InvalidPattern => BadPattern,
 }
 
 #[cfg(feature = "jwks-loader")]

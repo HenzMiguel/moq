@@ -574,7 +574,7 @@ impl Key {
 
 		let token = jsonwebtoken::decode::<Claims>(token, decode, &validation)?;
 
-		if let Some(exp) = token.claims.expires
+		if let Some(exp) = token.claims.expires()
 			&& exp < std::time::SystemTime::now()
 		{
 			return Err(crate::Error::TokenExpired);
@@ -717,13 +717,13 @@ mod tests {
 	}
 
 	fn create_test_claims() -> Claims {
-		Claims {
+		Claims::V0(crate::ClaimsV0 {
 			root: "test-path".to_string(),
 			publish: vec!["test-pub".into()],
 			subscribe: vec!["test-sub".into()],
 			expires: Some(SystemTime::now() + Duration::from_secs(3600)),
 			issued: Some(SystemTime::now()),
-		}
+		})
 	}
 
 	#[test]
@@ -779,7 +779,7 @@ mod tests {
 		let claims = create_test_claims();
 		let token = key.sign(&claims).unwrap();
 		let verified = key.verify(&token).unwrap();
-		assert_eq!(verified.root, claims.root);
+		assert_eq!(verified.root(), claims.root());
 	}
 
 	#[test]
@@ -867,22 +867,25 @@ mod tests {
 		let unrestricted = create_test_key();
 		let scoped = unrestricted
 			.clone()
-			.with_scope(crate::Scope {
-				root: "test-path".into(),
-				publish: vec!["allowed".into()],
-				subscribe: vec![],
-			})
+			.with_scope(
+				crate::ScopeV0 {
+					root: "test-path".into(),
+					publish: vec!["allowed".into()],
+					subscribe: vec![],
+				}
+				.into(),
+			)
 			.unwrap();
-		let allowed = Claims {
+		let allowed = Claims::V0(crate::ClaimsV0 {
 			root: "test-path".into(),
 			publish: vec!["allowed/room".into()],
 			..Default::default()
-		};
-		let denied = Claims {
+		});
+		let denied = Claims::V0(crate::ClaimsV0 {
 			root: "test-path".into(),
 			publish: vec!["other".into()],
 			..Default::default()
-		};
+		});
 
 		assert!(scoped.sign(&allowed).is_ok());
 		assert!(matches!(scoped.sign(&denied), Err(crate::Error::ScopeExceeded)));
@@ -891,15 +894,147 @@ mod tests {
 		assert!(matches!(scoped.verify(&forged), Err(crate::Error::ScopeExceeded)));
 	}
 
+	#[test]
+	fn test_v1_sign_verify_roundtrip() {
+		let key = create_test_key();
+		let claims = Claims::V1(crate::ClaimsV1 {
+			root: "pid".into(),
+			publish: ["*/chat".parse().unwrap()].into_iter().collect(),
+			subscribe: ["**/*.hang".parse().unwrap()].into_iter().collect(),
+			expires: None,
+			issued: None,
+		});
+		let token = key.sign(&claims).unwrap();
+		let verified = key.verify(&token).unwrap();
+		let Claims::V1(v1) = verified else {
+			panic!("expected v1")
+		};
+		assert_eq!(v1.root, "pid");
+		assert_eq!(
+			v1.publish.iter().map(|pattern| pattern.as_str()).collect::<Vec<_>>(),
+			["*/chat"]
+		);
+		assert_eq!(
+			v1.subscribe.iter().map(|pattern| pattern.as_str()).collect::<Vec<_>>(),
+			["**/*.hang"]
+		);
+	}
+
+	#[test]
+	fn test_v1_scope_enforcement() {
+		let unrestricted = create_test_key();
+		let v1_claims = Claims::V1(crate::ClaimsV1 {
+			root: "pid".into(),
+			publish: ["alice/chat".parse().unwrap()].into_iter().collect(),
+			subscribe: ["pid/demo.hang".parse().unwrap()].into_iter().collect(),
+			expires: None,
+			issued: None,
+		});
+		// An unscoped key may sign v1.
+		assert!(unrestricted.sign(&v1_claims).is_ok());
+
+		// A legacy v0 scoped key may sign only v0.
+		let legacy = unrestricted
+			.clone()
+			.with_scope(
+				crate::ScopeV0 {
+					root: "pid".into(),
+					publish: vec!["".into()],
+					subscribe: vec!["".into()],
+				}
+				.into(),
+			)
+			.unwrap();
+		assert!(matches!(legacy.sign(&v1_claims), Err(crate::Error::ScopeExceeded)));
+
+		// A v1 scope signs v1 within its patterns and rejects escapes.
+		let scoped = unrestricted
+			.clone()
+			.with_scope(
+				crate::ScopeV1 {
+					root: "pid".into(),
+					publish: ["*/chat".parse().unwrap()].into_iter().collect(),
+					subscribe: ["**/*.hang".parse().unwrap()].into_iter().collect(),
+				}
+				.into(),
+			)
+			.unwrap();
+		assert!(scoped.sign(&v1_claims).is_ok());
+		let escape = Claims::V1(crate::ClaimsV1 {
+			root: "pid".into(),
+			publish: ["alice/chat/extra".parse().unwrap()].into_iter().collect(),
+			subscribe: crate::Patterns::new(),
+			expires: None,
+			issued: None,
+		});
+		assert!(matches!(scoped.sign(&escape), Err(crate::Error::ScopeExceeded)));
+
+		// A v1 scope does not sign v0 claims.
+		let v0_claims = Claims::V0(crate::ClaimsV0 {
+			root: "pid".into(),
+			publish: vec!["alice/chat".into()],
+			..Default::default()
+		});
+		assert!(matches!(scoped.sign(&v0_claims), Err(crate::Error::ScopeExceeded)));
+
+		// The ceiling applies on verification too.
+		let forged = unrestricted.sign(&v1_claims).unwrap();
+		assert!(matches!(legacy.verify(&forged), Err(crate::Error::ScopeExceeded)));
+		let v0_forged = unrestricted
+			.sign(&Claims::V0(crate::ClaimsV0 {
+				root: "pid".into(),
+				publish: vec!["alice/chat".into()],
+				..Default::default()
+			}))
+			.unwrap();
+		assert!(matches!(scoped.verify(&v0_forged), Err(crate::Error::ScopeExceeded)));
+	}
+
+	#[test]
+	fn test_v1_fixture_token() {
+		// Fixed HS256 key and v1 token shared with js/token/src/interop.test.ts.
+		// The token has no exp/iat so HS256 signing is deterministic.
+		let key = Key::from_str(r#"{"kty":"oct","alg":"HS256","key_ops":["sign","verify"],"k":"dGVzdC1zZWNyZXQtdGhhdC1pcy1sb25nLWVub3VnaC1mb3ItaG1hYy1zaGEyNTY","kid":"v1-fixture"}"#).unwrap();
+		let claims = Claims::V1(crate::ClaimsV1 {
+			root: "pid".into(),
+			publish: ["*/chat".parse().unwrap()].into_iter().collect(),
+			subscribe: ["**/*.hang".parse().unwrap()].into_iter().collect(),
+			expires: None,
+			issued: None,
+		});
+		let token = key.sign(&claims).unwrap();
+		assert_eq!(
+			token,
+			"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImtpZCI6InYxLWZpeHR1cmUifQ.eyJ2IjoxLCJyb290IjoicGlkIiwicHVibGlzaCI6WyIqL2NoYXQiXSwic3Vic2NyaWJlIjpbIioqLyouaGFuZyJdfQ.1QEi35x3Nr60fhRTYfxtVwWuoVT2_VQ4pwdKLqvCHZY"
+		);
+		let verified = key.verify(&token).unwrap();
+		let Claims::V1(v1) = verified else {
+			panic!("expected v1")
+		};
+		assert_eq!(v1.root, "pid");
+	}
+
+	#[test]
+	fn test_v1_old_reader_fails_closed() {
+		// An old v0-only reader ignores the unknown `v`/`publish`/`subscribe`
+		// fields, leaving a token that grants nothing.
+		let json = r#"{"v":1,"root":"pid","publish":["*/chat"],"subscribe":["**/*.hang"]}"#;
+		let old: crate::ClaimsV0 = serde_json::from_str(json).unwrap();
+		assert_eq!(old.root, "pid");
+		assert!(old.publish.is_empty());
+		assert!(old.subscribe.is_empty());
+		assert!(matches!(old.validate(), Err(crate::Error::UselessToken)));
+	}
+
 	/// A key's crypto material is derived once and cached, so the fields it was derived from must
 	/// stay fixed. Changing the algorithm means building a new key, which derives fresh material.
 	#[test]
 	fn test_key_derived_material_never_stale() {
-		let claims = Claims {
+		let claims = Claims::V0(crate::ClaimsV0 {
 			root: "test-path".into(),
 			publish: vec!["test-pub".into()],
 			..Default::default()
-		};
+		});
 
 		// Sign once so the encode/decode caches are populated.
 		let key = create_test_key();
@@ -931,14 +1066,14 @@ mod tests {
 		let key = create_test_key();
 		assert!(key.scope.is_none());
 
-		let useless = crate::Scope::default();
+		let useless = crate::ScopeV0::default();
 		assert!(matches!(
-			key.clone().with_scope(useless.clone()),
+			key.clone().with_scope(useless.clone().into()),
 			Err(crate::Error::UselessScope)
 		));
 
 		let mut jwk = Jwk::from(&key);
-		jwk.scope = Some(useless);
+		jwk.scope = Some(useless.into());
 		assert!(matches!(Key::try_from(jwk), Err(crate::Error::UselessScope)));
 
 		let json = r#"{"alg":"HS256","key_ops":["sign"],"k":"Fp8kipWUJeUFqeSqWym_tRC_tyI8z-QpqopIGrbrD68","scope":{}}"#;
@@ -958,13 +1093,13 @@ mod tests {
 	#[test]
 	fn test_key_sign_invalid_claims() {
 		let key = create_test_key();
-		let invalid_claims = Claims {
+		let invalid_claims = Claims::V0(crate::ClaimsV0 {
 			root: "test-path".to_string(),
 			publish: vec![],
 			subscribe: vec![],
 			expires: None,
 			issued: None,
-		};
+		});
 
 		let result = key.sign(&invalid_claims);
 		assert!(result.is_err());
@@ -983,9 +1118,15 @@ mod tests {
 		let token = key.sign(&claims).unwrap();
 
 		let verified_claims = key.verify(&token).unwrap();
-		assert_eq!(verified_claims.root, claims.root);
-		assert_eq!(verified_claims.publish, claims.publish);
-		assert_eq!(verified_claims.subscribe, claims.subscribe);
+		assert_eq!(verified_claims.root(), claims.root());
+		assert_eq!(
+			verified_claims.as_v0().unwrap().publish,
+			claims.as_v0().unwrap().publish
+		);
+		assert_eq!(
+			verified_claims.as_v0().unwrap().subscribe,
+			claims.as_v0().unwrap().subscribe
+		);
 	}
 
 	#[test]
@@ -1024,7 +1165,9 @@ mod tests {
 	fn test_key_verify_expired_token() {
 		let key = create_test_key();
 		let mut claims = create_test_claims();
-		claims.expires = Some(SystemTime::now() - Duration::from_secs(3600)); // 1 hour ago
+		if let Claims::V0(v0) = &mut claims {
+			v0.expires = Some(SystemTime::now() - Duration::from_secs(3600)); // 1 hour ago
+		}
 		let token = key.sign(&claims).unwrap();
 
 		let result = key.verify(&token);
@@ -1034,39 +1177,51 @@ mod tests {
 	#[test]
 	fn test_key_verify_token_without_exp() {
 		let key = create_test_key();
-		let claims = Claims {
+		let claims = Claims::V0(crate::ClaimsV0 {
 			root: "test-path".to_string(),
 			publish: vec!["".to_string()],
 			subscribe: vec!["".to_string()],
 			expires: None,
 			issued: None,
-		};
+		});
 		let token = key.sign(&claims).unwrap();
 
 		let verified_claims = key.verify(&token).unwrap();
-		assert_eq!(verified_claims.root, claims.root);
-		assert_eq!(verified_claims.publish, claims.publish);
-		assert_eq!(verified_claims.subscribe, claims.subscribe);
-		assert_eq!(verified_claims.expires, None);
+		assert_eq!(verified_claims.root(), claims.root());
+		assert_eq!(
+			verified_claims.as_v0().unwrap().publish,
+			claims.as_v0().unwrap().publish
+		);
+		assert_eq!(
+			verified_claims.as_v0().unwrap().subscribe,
+			claims.as_v0().unwrap().subscribe
+		);
+		assert_eq!(verified_claims.expires(), None);
 	}
 
 	#[test]
 	fn test_key_round_trip() {
 		let key = create_test_key();
-		let original_claims = Claims {
+		let original_claims = Claims::V0(crate::ClaimsV0 {
 			root: "test-path".to_string(),
 			publish: vec!["test-pub".into()],
 			subscribe: vec!["test-sub".into()],
 			expires: Some(SystemTime::now() + Duration::from_secs(3600)),
 			issued: Some(SystemTime::now()),
-		};
+		});
 
 		let token = key.sign(&original_claims).unwrap();
 		let verified_claims = key.verify(&token).unwrap();
 
-		assert_eq!(verified_claims.root, original_claims.root);
-		assert_eq!(verified_claims.publish, original_claims.publish);
-		assert_eq!(verified_claims.subscribe, original_claims.subscribe);
+		assert_eq!(verified_claims.root(), original_claims.root());
+		assert_eq!(
+			verified_claims.as_v0().unwrap().publish,
+			original_claims.as_v0().unwrap().publish
+		);
+		assert_eq!(
+			verified_claims.as_v0().unwrap().subscribe,
+			original_claims.as_v0().unwrap().subscribe
+		);
 	}
 
 	#[test]
@@ -1284,9 +1439,15 @@ mod tests {
 		let token = key.sign(&claims).unwrap();
 		let verified_claims = key.verify(&token).unwrap();
 
-		assert_eq!(verified_claims.root, claims.root);
-		assert_eq!(verified_claims.publish, claims.publish);
-		assert_eq!(verified_claims.subscribe, claims.subscribe);
+		assert_eq!(verified_claims.root(), claims.root());
+		assert_eq!(
+			verified_claims.as_v0().unwrap().publish,
+			claims.as_v0().unwrap().publish
+		);
+		assert_eq!(
+			verified_claims.as_v0().unwrap().subscribe,
+			claims.as_v0().unwrap().subscribe
+		);
 	}
 
 	#[test]
@@ -1389,7 +1550,7 @@ mod tests {
 
 			let token = key.sign(&claims).unwrap();
 			let verified_claims = key.verify(&token).unwrap();
-			assert_eq!(verified_claims.root, claims.root);
+			assert_eq!(verified_claims.root(), claims.root());
 		}
 	}
 
@@ -1441,12 +1602,17 @@ mod tests {
 
 		let private_verified_claims = key.verify(&token).unwrap();
 		assert_eq!(
-			private_verified_claims.root, claims.root,
+			private_verified_claims.root(),
+			claims.root(),
 			"validation using private key"
 		);
 
 		let public_verified_claims = key.to_public().unwrap().verify(&token).unwrap();
-		assert_eq!(public_verified_claims.root, claims.root, "validation using public key");
+		assert_eq!(
+			public_verified_claims.root(),
+			claims.root(),
+			"validation using public key"
+		);
 	}
 
 	#[test]
@@ -1652,24 +1818,24 @@ mod tests {
 	fn test_js_hs256_token_verify() {
 		let key = Key::from_str(JS_HS256_KEY).unwrap();
 		let claims = key.verify(JS_HS256_TOKEN).unwrap();
-		assert_eq!(claims.root, "live");
-		assert_eq!(claims.publish, vec!["camera1"]);
-		assert_eq!(claims.subscribe, vec!["camera1", "camera2"]);
+		assert_eq!(claims.root(), "live");
+		assert_eq!(claims.as_v0().unwrap().publish, vec!["camera1"]);
+		assert_eq!(claims.as_v0().unwrap().subscribe, vec!["camera1", "camera2"]);
 	}
 
 	#[test]
 	fn test_js_hs256_sign_and_roundtrip() {
 		let key = Key::from_str(JS_HS256_KEY).unwrap();
-		let claims = Claims {
+		let claims = Claims::V0(crate::ClaimsV0 {
 			root: "rust-test".to_string(),
 			publish: vec!["pub1".into()],
 			subscribe: vec!["sub1".into()],
 			..Default::default()
-		};
+		});
 		let token = key.sign(&claims).unwrap();
 		let verified = key.verify(&token).unwrap();
-		assert_eq!(verified.root, "rust-test");
-		assert_eq!(verified.publish, vec!["pub1"]);
+		assert_eq!(verified.root(), "rust-test");
+		assert_eq!(verified.as_v0().unwrap().publish, vec!["pub1"]);
 	}
 
 	#[test]
@@ -1686,16 +1852,16 @@ mod tests {
 	fn test_js_eddsa_token_verify_with_private_key() {
 		let key = Key::from_str(JS_EDDSA_PRIVATE_KEY).unwrap();
 		let claims = key.verify(JS_EDDSA_TOKEN).unwrap();
-		assert_eq!(claims.root, "stream");
-		assert_eq!(claims.publish, vec!["video"]);
+		assert_eq!(claims.root(), "stream");
+		assert_eq!(claims.as_v0().unwrap().publish, vec!["video"]);
 	}
 
 	#[test]
 	fn test_js_eddsa_token_verify_with_public_key() {
 		let key = Key::from_str(JS_EDDSA_PUBLIC_KEY).unwrap();
 		let claims = key.verify(JS_EDDSA_TOKEN).unwrap();
-		assert_eq!(claims.root, "stream");
-		assert_eq!(claims.publish, vec!["video"]);
+		assert_eq!(claims.root(), "stream");
+		assert_eq!(claims.as_v0().unwrap().publish, vec!["video"]);
 	}
 
 	#[test]

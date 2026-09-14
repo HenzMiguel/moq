@@ -1,8 +1,9 @@
 import * as base64 from "@hexagon/base64";
+import { Pattern, Patterns } from "@moq/pattern";
 import * as z from "@zod/mini";
 import * as jose from "jose";
 import { type Algorithm, AlgorithmSchema } from "./algorithm.ts";
-import { type Claims, ClaimsSchema, ScopeSchema, scopeAllows } from "./claims.ts";
+import { type Claims, ClaimsSchema, type ClaimsV1, ScopeSchema, scopeAllows } from "./claims.ts";
 
 /**
  * A validated key identifier (kid). Only alphanumeric, hyphens, and underscores.
@@ -201,15 +202,17 @@ export async function sign(key: Key, claims: Claims): Promise<string> {
 	ensureOperationSupported(key, "sign");
 
 	// Validate claims before signing
+	let parsed: Claims;
 	try {
-		ClaimsSchema.parse(claims);
+		parsed = ClaimsSchema.parse(claims);
 	} catch (error) {
 		throw new Error(`Invalid claims: ${error instanceof Error ? error.message : "unknown error"}`);
 	}
-	ensureClaimsWithinScope(key, claims);
+	const normalized = normalizeClaims(parsed);
+	ensureClaimsWithinScope(key, normalized);
 
 	const joseKey = await importJoseKey(key);
-	const jwt = await new jose.SignJWT(claims)
+	const jwt = await new jose.SignJWT({ ...normalized } as Record<string, unknown>)
 		.setProtectedHeader({
 			alg: key.alg,
 			typ: "JWT",
@@ -235,7 +238,7 @@ export async function verify(key: PublicKey | SymmetricKey, token: string): Prom
 
 	let claims: Claims;
 	try {
-		claims = ClaimsSchema.parse(payload);
+		claims = normalizeClaims(ClaimsSchema.parse(payload) as Claims);
 	} catch (error) {
 		throw new Error(`Failed to parse token claims: ${error instanceof Error ? error.message : "unknown error"}`);
 	}
@@ -244,6 +247,20 @@ export async function verify(key: PublicKey | SymmetricKey, token: string): Prom
 	ensureClaimsWithinScope(key, claims);
 
 	return claims;
+}
+
+function normalizeClaims(claims: Claims): Claims {
+	if (!("v" in claims && claims.v === 1)) return claims;
+	const v1 = claims as ClaimsV1;
+	if (v1.root.includes("*")) throw new Error(`Invalid root: ${JSON.stringify(v1.root)}`);
+	if (v1.root !== "") Pattern.literal(v1.root);
+	const normalize = (claim: string | string[] | undefined): string[] => {
+		const items = claim === undefined ? [] : typeof claim === "string" ? [claim] : claim;
+		const set = new Patterns();
+		for (const text of items) set.insert(Pattern.parse(text));
+		return set.toArray().map((pattern) => pattern.text);
+	};
+	return { ...v1, publish: normalize(v1.publish), subscribe: normalize(v1.subscribe) };
 }
 
 function ensureClaimsWithinScope(key: PublicKey | SymmetricKey | Key, claims: Claims): void {

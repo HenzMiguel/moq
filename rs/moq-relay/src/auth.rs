@@ -963,12 +963,12 @@ impl GrantResponse {
 		if expires.is_some_and(|expires| expires <= std::time::SystemTime::now()) {
 			return Err(AuthError::Refused);
 		}
-		let mut claims = moq_token::Claims::default()
+		let mut claims = moq_token::ClaimsV0::default()
 			.with_root(self.root.clone().unwrap_or_else(|| path.to_string()))
 			.with_subscribe(self.subscribe.clone())
 			.with_publish(self.publish.clone());
 		claims.expires = expires;
-		Ok(claims)
+		Ok(moq_token::Claims::V0(claims))
 	}
 
 	/// True when the endpoint returned a grant that authorizes nothing, which is
@@ -1676,10 +1676,12 @@ impl Auth {
 					}
 					// Anonymous access: anchor the public claims at the connection path
 					// so the overlap check below is a no-op; routing lands on the alias.
-					moq_token::Claims::default()
-						.with_root(params.path.clone())
-						.with_subscribe(subscribe)
-						.with_publish(publish)
+					moq_token::Claims::V0(
+						moq_token::ClaimsV0::default()
+							.with_root(params.path.clone())
+							.with_subscribe(subscribe)
+							.with_publish(publish),
+					)
 				}
 			},
 			// The endpoint already decided. A reply with no usable grant is a
@@ -1825,19 +1827,23 @@ impl Auth {
 			// direction (request is under a public prefix, or request is a parent of one).
 			let overlaps = |p: &Path| root.has_prefix(p) || p.has_prefix(&root);
 			if self.public.subscribe.iter().any(&overlaps) || self.public.publish.iter().any(overlaps) {
-				moq_token::Claims::default()
-					.with_root("")
-					.with_subscribe(self.public.subscribe.iter().map(|p| p.to_string()))
-					.with_publish(self.public.publish.iter().map(|p| p.to_string()))
+				moq_token::Claims::V0(
+					moq_token::ClaimsV0::default()
+						.with_root("")
+						.with_subscribe(self.public.subscribe.iter().map(|p| p.to_string()))
+						.with_publish(self.public.publish.iter().map(|p| p.to_string())),
+				)
 			} else if let Some((base, client)) = &self.public.api {
 				// No static overlap. Response paths are relative to the namespace.
 				let namespace = root.to_string();
 				let url = base.join(&namespace)?;
 				let response = Self::fetch_public_response(client, &url).await?;
-				moq_token::Claims::default()
-					.with_root(namespace)
-					.with_subscribe(response.subscribe)
-					.with_publish(response.publish)
+				moq_token::Claims::V0(
+					moq_token::ClaimsV0::default()
+						.with_root(namespace)
+						.with_subscribe(response.subscribe)
+						.with_publish(response.publish),
+				)
 			} else {
 				return Err(AuthError::ExpectedToken);
 			}
@@ -1850,7 +1856,7 @@ impl Auth {
 
 	/// Reduce verified `claims` into an [`AuthToken`].
 	///
-	/// [`Claims::authorize`](moq_token::Claims::authorize) does the overlap check and
+	/// [`ClaimsV0::authorize`](moq_token::ClaimsV0::authorize) does the overlap check and
 	/// rebases the permission prefixes against `check_root` (the ORIGINAL connection
 	/// path the client dialed, e.g. a vanity name); a token whose root sits outside
 	/// that path is rejected. The resulting `AuthToken.root` is anchored at
@@ -1860,6 +1866,9 @@ impl Auth {
 	/// (same depth), so the rebased relative prefixes anchor unchanged. The standalone
 	/// path passes the same value for both (no alias). Shared by the standalone and
 	/// `--auth-api` paths.
+	///
+	/// Only v0 prefix claims are admitted here; v1 pattern claims are verified by
+	/// the library but flow into pattern-scoped origins in a later quest.
 	fn finalize(
 		check_root: &str,
 		route_root: &str,
@@ -1880,9 +1889,13 @@ impl Auth {
 			return Err(AuthError::IncorrectRoot);
 		}
 
+		let moq_token::Claims::V0(v0) = &claims else {
+			return Err(AuthError::IncorrectRoot);
+		};
+
 		// A token that grants nothing here is indistinguishable from one aimed at
 		// another root, so both reduce to IncorrectRoot.
-		let permissions = claims.authorize(check_root).map_err(|_| AuthError::IncorrectRoot)?;
+		let permissions = v0.authorize(check_root).map_err(|_| AuthError::IncorrectRoot)?;
 
 		// authorize() returns paths already normalized and RELATIVE to check_root, so
 		// they anchor under route_root whatever its depth.
@@ -1893,7 +1906,7 @@ impl Auth {
 			subscribe: rebase(permissions.subscribe),
 			publish: rebase(permissions.publish),
 			tier: Tier::default(),
-			expires: claims.expires,
+			expires: claims.expires(),
 			revalidate: None,
 		})
 	}

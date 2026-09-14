@@ -5,7 +5,7 @@
 //!
 //! See [`Claims`] for the JWT claims structure and [`Key`] for key management.
 //! Pattern types from [`moq-pattern`](moq_pattern) are re-exported for standalone use.
-//! Token claims and authorization still use path prefixes.
+//! Unversioned claims use v0 path prefixes; `v: 1` claims use exact patterns.
 
 mod algorithm;
 mod claims;

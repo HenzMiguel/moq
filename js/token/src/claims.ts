@@ -1,26 +1,48 @@
 /**
- * The payload of a token: a root, plus the publish/subscribe prefixes granted beneath it.
+ * The versioned payload of a token: a root, plus the grants beneath it.
+ *
+ * Missing `v` decodes legacy `put`/`get` prefixes as v0; `v: 1` decodes
+ * `publish`/`subscribe` patterns as v1. Unknown versions and mixed fields fail
+ * closed.
  *
  * @module
  */
 
+import { Pattern, Patterns } from "@moq/pattern";
 import * as z from "@zod/mini";
 import * as Path from "./path.ts";
 
-/** A `put`/`get` claim is one path or many; normalize it to a list. */
+/** A `put`/`get`/`publish`/`subscribe` claim is one path or many; normalize it to a list. */
 function list(claim: string | string[] | undefined): string[] {
 	if (claim === undefined) return [];
 	return typeof claim === "string" ? [claim] : claim;
 }
 
+/** Reduce prefix grants to a canonical union: normalized, deduplicated, sorted, covered members dropped. */
+function normalizePrefixes(items: string[]): string[] {
+	const normalized = [...new Set(items.map((item) => Path.normalize(item)))].sort();
+	return normalized.filter((item, index) => !normalized.slice(0, index).some((kept) => Path.hasPrefix(item, kept)));
+}
+
+function validateRoot(root: string): void {
+	if (root.includes("*")) throw new Error(`Invalid root: ${JSON.stringify(root)}`);
+	if (root !== "") Pattern.literal(root);
+}
+
+/** Throw on an invalid v1 root or pattern list, so schemas fail closed at parse. */
+function validateScopeV1(root: string, publish: string[], subscribe: string[]): void {
+	validateRoot(root);
+	for (const text of [...publish, ...subscribe]) Pattern.parse(text);
+}
+
 /**
- * The immutable ceiling on what a key may grant, embedded in its JWK.
+ * The immutable v0 ceiling on what a key may grant, embedded in its JWK.
  *
  * `root` is optional on the wire to match the Rust `moq-token` crate, which omits it
  * when the scope sits at the top level.
  */
-export const ScopeSchema = z
-	.object({
+export const ScopeV0Schema = z
+	.strictObject({
 		/** The root that `put` and `get` are relative to. Defaults to the empty string. */
 		root: z._default(z.string(), ""),
 		/** Prefixes this key may grant to publishers, relative to `root`. */
@@ -34,16 +56,56 @@ export const ScopeSchema = z
 		}),
 	);
 
+export type ScopeV0 = z.infer<typeof ScopeV0Schema>;
+
+/** The immutable v1 ceiling on what a key may grant: `publish`/`subscribe` patterns relative to `root`. */
+export const ScopeV1Schema = z
+	.strictObject({
+		/** The claim version; always 1 for pattern scopes. */
+		v: z.literal(1),
+		/** The root that `publish` and `subscribe` are relative to. Defaults to the empty string. */
+		root: z._default(z.string(), ""),
+		/** Patterns this key may grant to publishers, relative to `root`. */
+		publish: z.optional(z.union([z.string(), z.array(z.string())])),
+		/** Patterns this key may grant to subscribers, relative to `root`. */
+		subscribe: z.optional(z.union([z.string(), z.array(z.string())])),
+	})
+	.check(
+		z.refine((data) => list(data.publish).length > 0 || list(data.subscribe).length > 0, {
+			message: "Either publish or subscribe must grant at least one pattern",
+		}),
+		z.refine(
+			(data) => {
+				try {
+					validateScopeV1(data.root, list(data.publish), list(data.subscribe));
+					return true;
+				} catch {
+					return false;
+				}
+			},
+			{ message: "Invalid root or pattern" },
+		),
+	);
+
+export type ScopeV1 = z.infer<typeof ScopeV1Schema>;
+
+/**
+ * The versioned ceiling on what a key may grant, embedded in its JWK.
+ *
+ * An unversioned scope is v0 with `put`/`get`; a `v: 1` scope carries
+ * `publish`/`subscribe` patterns. Unknown versions and mixed fields fail closed.
+ */
+export const ScopeSchema = z.union([ScopeV0Schema, ScopeV1Schema]);
 export type Scope = z.infer<typeof ScopeSchema>;
 
 /**
- * The JWT claims structure for moq-token.
+ * The v0 JWT claims: `root` plus `put`/`get` prefixes beneath it.
  *
  * `root` is optional on the wire: a token scoped to the top-level path omits it, so
  * it defaults to the empty string to match the Rust `moq-token` crate.
  */
-export const ClaimsSchema = z
-	.object({
+export const ClaimsV0Schema = z
+	.strictObject({
 		/** The root that `put` and `get` are relative to. Defaults to the empty string. */
 		root: z._default(z.string(), ""),
 		/** Paths the holder may publish to, relative to `root`. */
@@ -64,40 +126,82 @@ export const ClaimsSchema = z
 		}),
 	);
 
+export type ClaimsV0 = z.infer<typeof ClaimsV0Schema>;
+
+/** The v1 JWT claims: `root` plus exact `publish`/`subscribe` patterns beneath it. */
+export const ClaimsV1Schema = z
+	.strictObject({
+		/** The claim version; always 1 for pattern claims. */
+		v: z.literal(1),
+		/** The root that `publish` and `subscribe` are relative to. Defaults to the empty string. */
+		root: z._default(z.string(), ""),
+		/** Patterns the holder may publish to, relative to `root`. */
+		publish: z.optional(z.union([z.string(), z.array(z.string())])),
+		/** Patterns the holder may subscribe to, relative to `root`. */
+		subscribe: z.optional(z.union([z.string(), z.array(z.string())])),
+		/** Expiration time, as a unix timestamp in seconds. */
+		exp: z.optional(z.number()),
+		/** Issued-at time, as a unix timestamp in seconds. */
+		iat: z.optional(z.number()),
+	})
+	.check(
+		z.refine((data) => list(data.publish).length > 0 || list(data.subscribe).length > 0, {
+			message: "Either publish or subscribe must grant at least one pattern",
+		}),
+		z.refine(
+			(data) => {
+				try {
+					validateScopeV1(data.root, list(data.publish), list(data.subscribe));
+					return true;
+				} catch {
+					return false;
+				}
+			},
+			{ message: "Invalid root or pattern" },
+		),
+	);
+
+export type ClaimsV1 = z.infer<typeof ClaimsV1Schema>;
+
+/**
+ * JWT claims structure for moq-token, versioned.
+ *
+ * Missing `v` reads legacy `put`/`get`; `v: 1` reads `publish`/`subscribe`.
+ * Issuers stay on v0 until the M2 rollout; v1 operations already sign, verify,
+ * and authorize correctly here.
+ */
+export const ClaimsSchema = z.union([ClaimsV0Schema, ClaimsV1Schema]);
+
 /**
  * JWT claims structure for moq-token
  */
 export type Claims = z.infer<typeof ClaimsSchema>;
 
 /**
- * The access a {@link Claims} grants at a specific path, with every prefix rebased so
- * it is relative to that path.
+ * The access a {@link Claims} grants at a specific path, with every prefix or pattern
+ * rebased so it is relative to that path.
  *
  * Produced by {@link authorize}. An empty string grants the path itself and everything
- * beneath it.
+ * beneath it for v0; for v1 the empty pattern matches only the path and `**` matches
+ * the path and everything beneath it.
  */
 export interface Permissions {
-	/** Paths the holder may subscribe to, relative to the authorized path. */
+	/** Paths or patterns the holder may subscribe to, relative to the authorized path. */
 	subscribe: string[];
-	/** Paths the holder may publish to, relative to the authorized path. */
+	/** Paths or patterns the holder may publish to, relative to the authorized path. */
 	publish: string[];
 }
 
 /**
- * The access `claims` grants at `path`, rebased so each returned prefix is relative
- * to `path`.
+ * The access `claims` grants at `path`, rebased so each returned prefix or pattern is
+ * relative to `path`.
  *
- * `path` and `claims.root` must overlap, in either direction:
+ * V0 grants are prefixes: `path` and `claims.root` must overlap, in either direction,
+ * and matching is segment-aware. V1 grants are exact patterns: each pattern is placed
+ * beneath the root, then rebased at `path`, which is set-valued (a globstar pattern
+ * rebased where its tail already matched yields both the empty pattern and itself).
  *
- * - `path` extends the root (root `demo`, path `demo/room`), so the extra `room`
- *   narrows each prefix and drops the ones outside it.
- * - `path` is a parent of the root (root `demo`, path ``), so `demo` is prepended to
- *   each prefix to keep it anchored where the token points.
- *
- * Matching is segment-aware, so a root of `foo` does not cover `foobar`. Slashes at
- * the boundaries are implicit: `/demo/` and `demo` are the same path.
- *
- * Throws when the two don't overlap, and when they do but every prefix falls outside
+ * Throws when the two don't overlap, and when they do but every grant falls outside
  * `path`.
  *
  * This is authorization only. Verify the signature first with {@link verify}, which is
@@ -106,6 +210,11 @@ export interface Permissions {
  * @public
  */
 export function authorize(claims: Claims, path: string): Permissions {
+	if ("v" in claims && claims.v === 1) return authorizeV1(claims, path);
+	return authorizeV0(claims, path);
+}
+
+function authorizeV0(claims: ClaimsV0, path: string): Permissions {
 	const target = Path.normalize(path);
 	const root = Path.normalize(claims.root);
 
@@ -139,7 +248,7 @@ export function authorize(claims: Claims, path: string): Permissions {
 				scoped.push("");
 			}
 		}
-		return scoped;
+		return normalizePrefixes(scoped);
 	};
 
 	const permissions: Permissions = { subscribe: scope(claims.get), publish: scope(claims.put) };
@@ -150,22 +259,66 @@ export function authorize(claims: Claims, path: string): Permissions {
 	return permissions;
 }
 
+function authorizeV1(claims: ClaimsV1, path: string): Permissions {
+	validateRoot(claims.root);
+	const target = Path.normalize(path);
+	const root = Path.normalize(claims.root);
+
+	const overlaps = Path.stripPrefix(target, root) !== undefined || Path.stripPrefix(root, target) !== undefined;
+	if (!overlaps) throw new Error(`path "${target}" does not overlap the token root "${root}"`);
+
+	const rebase = (claim: string | string[] | undefined): string[] => {
+		const out = new Patterns();
+		for (const text of list(claim)) {
+			const absolute = Pattern.parse(text).rooted(claims.root);
+			for (const residual of absolute.rebase(path)) out.insert(residual);
+		}
+		return out.toArray().map((pattern) => pattern.text);
+	};
+
+	const permissions: Permissions = { subscribe: rebase(claims.subscribe), publish: rebase(claims.publish) };
+	if (permissions.subscribe.length === 0 && permissions.publish.length === 0) {
+		throw new Error(`token grants no access to path "${target}"`);
+	}
+	return permissions;
+}
+
 /**
- * Whether every path `claims` grants is covered by `scope`, per role.
+ * Whether every path or pattern `claims` grants is covered by `scope`, per role.
  *
- * Both sides are resolved against their own root before comparing, so the same
- * grant expressed as `root: "demo"` + `put: ["room"]` or as `put: ["demo/room"]` is
- * treated identically. Matching is segment-aware, so a scope of `live` does not
- * cover `lively`, and the roles are checked independently: a publish-only scope
- * never authorizes a subscribe grant.
+ * V0 compares prefixes resolved against their own roots; v1 requires every claims
+ * pattern, placed beneath its root, to be contained in some scope pattern beneath
+ * its root. Cross-version pairs never allow. A publish-only scope never authorizes
+ * a subscribe grant.
  *
  * Must stay in lockstep with `Scope::allows` in the Rust `moq-token` crate, which
  * checks the same keys.
  */
 export function scopeAllows(scope: Scope, claims: Claims): boolean {
+	const scopeIsV1 = "v" in scope && scope.v === 1;
+	const claimsIsV1 = "v" in claims && claims.v === 1;
+	if (scopeIsV1 !== claimsIsV1) return false;
+	if (scopeIsV1 && claimsIsV1) {
+		validateRoot(scope.root);
+		validateRoot(claims.root);
+		const covers = (
+			granted: string | string[] | undefined,
+			scopeRoot: string,
+			requested: string | string[] | undefined,
+			claimsRoot: string,
+		): boolean => {
+			const scopeAbsolute = new Patterns(list(granted).map((text) => Pattern.parse(text).rooted(scopeRoot)));
+			const requestedAbsolute = list(requested).map((text) => Pattern.parse(text).rooted(claimsRoot));
+			return requestedAbsolute.every((pattern) => scopeAbsolute.contains(pattern));
+		};
+		return (
+			covers(scope.publish, scope.root, claims.publish, claims.root) &&
+			covers(scope.subscribe, scope.root, claims.subscribe, claims.root)
+		);
+	}
 	return (
-		covers(scope.root, scope.put ?? [], claims.root, list(claims.put)) &&
-		covers(scope.root, scope.get ?? [], claims.root, list(claims.get))
+		covers((scope as ScopeV0).root, (scope as ScopeV0).put ?? [], claims.root, list((claims as ClaimsV0).put)) &&
+		covers((scope as ScopeV0).root, (scope as ScopeV0).get ?? [], claims.root, list((claims as ClaimsV0).get))
 	);
 }
 

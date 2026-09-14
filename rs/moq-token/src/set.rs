@@ -161,13 +161,13 @@ mod tests {
 	use std::time::{Duration, SystemTime};
 
 	fn create_test_claims() -> Claims {
-		Claims {
+		Claims::V0(crate::ClaimsV0 {
 			root: "test-path".to_string(),
 			publish: vec!["test-pub".into()],
 			subscribe: vec!["test-sub".into()],
 			expires: Some(SystemTime::now() + Duration::from_secs(3600)),
 			issued: Some(SystemTime::now()),
-		}
+		})
 	}
 
 	fn create_test_key(kid: Option<&str>) -> Key {
@@ -361,7 +361,7 @@ mod tests {
 		let token = set.sign(&claims).unwrap();
 		let decoded = set.verify(&token).unwrap();
 
-		assert_eq!(decoded.root, claims.root);
+		assert_eq!(decoded.root(), claims.root());
 	}
 
 	#[test]
@@ -379,7 +379,7 @@ mod tests {
 
 		// Decode using the set
 		let decoded = set.verify(&token).unwrap();
-		assert_eq!(decoded.root, claims.root);
+		assert_eq!(decoded.root(), claims.root());
 	}
 
 	#[test]

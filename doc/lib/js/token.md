@@ -10,9 +10,9 @@ description: Mint and verify relay JWTs in TypeScript
 The TypeScript twin of [`moq-token`](/lib/rs/moq-token). Generate keys (HMAC,
 RSA, ECDSA, EdDSA, individually or as a JWK set), `sign` and `verify` tokens,
 and `authorize` a connection path against the claims exactly as
-[moq-relay](/bin/relay/auth) does. Tokens are interchangeable with the Rust
+[moq-relay](/bin/relay/auth) does for v0. Tokens are interchangeable with the Rust
 side. [`Pattern`](https://www.npmjs.com/package/@moq/pattern) is re-exported
-for standalone use; token claims and authorization still use path prefixes.
+for standalone use; `v: 1` claims and key scopes carry exact pattern sets.
 
 ```bash
 bun add @moq/token

@@ -88,8 +88,6 @@ CAT cannot represent `pid/*/chat`.
 
 ## Related
 
-- [Versioned token claims API](/quest/m1/api-token-claims.md) - owns the working v0/v1 library contract before release
-
 - [Wildcard advertisements](/quest/m2/wildcard/README.md) - routing adopts the
   matcher while retaining its own cost, pool, refusal, and resolution work
 - [mTLS explicit scope](/quest/m1/auth-api/mtls-scope.md) - an mTLS grant

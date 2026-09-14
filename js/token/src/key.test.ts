@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import * as base64 from "@hexagon/base64";
 import { exportJWK, generateKeyPair } from "jose";
 import type { Algorithm } from "./algorithm.ts";
-import { authorize, type Claims } from "./claims.ts";
+import { authorize, type Claims, type ClaimsV0 } from "./claims.ts";
 import { generate } from "./generate.ts";
 import { INSECURE_TEST_RS256_OTHER, INSECURE_TEST_RSA_KEYS } from "./insecure-test-keys.ts";
 import { type Key, load, loadPublic, sign, toPublicKey, verify } from "./key.ts";
@@ -181,8 +181,8 @@ test("verify - successful verification", async () => {
 	const claims = await verify(key, token);
 
 	expect(claims.root).toBe(testClaims.root);
-	expect(claims.put).toBe(testClaims.put);
-	expect(claims.get).toBe(testClaims.get);
+	expect((claims as ClaimsV0).put).toBe(testClaims.put);
+	expect((claims as ClaimsV0).get).toBe(testClaims.get);
 });
 
 test("verify - key doesn't support verification", async () => {
@@ -236,7 +236,7 @@ test("verify - token without exp field", async () => {
 	const claims = await verify(key, token);
 
 	expect(claims.root).toBe("test-path");
-	expect(claims.put).toBe("test-pub");
+	expect((claims as ClaimsV0).put).toBe("test-pub");
 	expect(claims.exp).toBe(undefined);
 });
 
@@ -269,8 +269,8 @@ test("round-trip - sign and verify", async () => {
 	const verifiedClaims = await verify(key, token);
 
 	expect(verifiedClaims.root).toBe(originalClaims.root);
-	expect(verifiedClaims.put).toBe(originalClaims.put);
-	expect(verifiedClaims.get).toBe(originalClaims.get);
+	expect((verifiedClaims as ClaimsV0).put).toBe((originalClaims as ClaimsV0).put);
+	expect((verifiedClaims as ClaimsV0).get).toBe((originalClaims as ClaimsV0).get);
 	expect(verifiedClaims.exp).toBe(originalClaims.exp);
 	expect(verifiedClaims.iat).toBe(originalClaims.iat);
 });
@@ -351,7 +351,7 @@ test("different algorithms - HS384", async () => {
 	const verifiedClaims = await verify(key, token);
 
 	expect(verifiedClaims.root).toBe(testClaims.root);
-	expect(verifiedClaims.put).toBe(testClaims.put);
+	expect((verifiedClaims as ClaimsV0).put).toBe(testClaims.put);
 });
 
 test("different algorithms - HS512", async () => {
@@ -368,7 +368,7 @@ test("different algorithms - HS512", async () => {
 	const verifiedClaims = await verify(key, token);
 
 	expect(verifiedClaims.root).toBe(testClaims.root);
-	expect(verifiedClaims.put).toBe(testClaims.put);
+	expect((verifiedClaims as ClaimsV0).put).toBe(testClaims.put);
 });
 
 test("verify - private to public key", async () => {
