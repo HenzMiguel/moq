@@ -503,42 +503,33 @@ impl TrackState {
 
 	/// Expire groups whose last access is older than `max_age`, never the latest.
 	///
-	/// One bounded, rotating scan over the eviction order, which holds every cached
-	/// group except the protected latest. The cursor persists across calls, so
-	/// entries beyond one scan window can't be starved by fresh (recently read,
-	/// fetched, or written) entries in front of them: every position is revisited
-	/// within a few writes. Expiry throughput is therefore EVICT_SCAN groups per write; the
-	/// byte budget reclaims the remainder under memory pressure.
+	/// Two passes over the eviction order, which holds every cached group except the
+	/// protected latest. First the front is drained: entries are in insertion order,
+	/// so the oldest sit there and go in sequence, and the drain stops at the first
+	/// one still fresh. That keeps the cache a contiguous tail: a rotating window alone
+	/// revisits each position only every `len / EVICT_SCAN` writes, and with dead
+	/// entries padding the order that is long enough for a group past the window to
+	/// outlive newer ones, leaving stragglers below a hole for a subscriber replaying
+	/// history to trip over.
+	///
+	/// Then one bounded, rotating window. Its cursor persists across calls, so entries
+	/// behind a fresh one at the front (recently read, fetched, or written) still
+	/// expire: every position is revisited within a few writes. Expiry throughput
+	/// behind such an entry is therefore EVICT_SCAN groups per write; the byte budget
+	/// reclaims the remainder under memory pressure.
 	fn evict_expired(&mut self, max_age: Duration) {
 		let now = self.cache.pool().now();
 		let max_ticks = cache::Pool::ticks(max_age);
+
+		while !self.evict.is_empty() && self.expire_entry(0, now, max_ticks) {
+			self.evict.pop_front();
+		}
 
 		let len = self.evict.len();
 		if len > 0 {
 			let start = self.expire_cursor % len;
 			for step in 0..len.min(EVICT_SCAN) {
-				let (sequence, stamp) = self.evict[(start + step) % len];
-				let Some(slot) = self.lookup.get(&sequence) else {
-					continue;
-				};
-				if slot.stamp != stamp {
-					// A historical hint; the live entry is elsewhere in the queue.
-					continue;
-				}
-				// Already aborted: the frames are gone, reclaim the slot so a
-				// later fetch can serve the sequence again.
-				if slot.group.is_aborted() {
-					self.lookup.remove(&sequence);
-					continue;
-				}
-				if Some(sequence) == self.latest_group || now.saturating_sub(slot.group.cache_accessed()) <= max_ticks {
-					continue;
-				}
-				// Take the group out of the cache and abort it, so any consumer
-				// still reading surfaces `Error::Old` instead of blocking forever
-				// on a frame that will never arrive.
-				let slot = self.lookup.remove(&sequence).unwrap();
-				let _ = slot.group.abort(Error::Old);
+				self.expire_entry((start + step) % len, now, max_ticks);
 			}
 			self.expire_cursor = (start + EVICT_SCAN) % len;
 		}
@@ -662,6 +653,36 @@ impl TrackState {
 		if visible {
 			self.arrival.push_back((sequence, stamp));
 		}
+	}
+
+	/// Expire the eviction-order entry at `index` if its group is due, and report
+	/// whether the entry is dead: a historical hint, an aborted group whose slot was
+	/// just reclaimed, or a group expired here. The latest group and a recently
+	/// accessed one are neither.
+	fn expire_entry(&mut self, index: usize, now: u64, max_ticks: u64) -> bool {
+		let (sequence, stamp) = self.evict[index];
+		let Some(slot) = self.lookup.get(&sequence) else {
+			return true;
+		};
+		if slot.stamp != stamp {
+			// A historical hint; the live entry is elsewhere in the queue.
+			return true;
+		}
+		// Already aborted: the frames are gone, reclaim the slot so a later fetch
+		// can serve the sequence again.
+		if slot.group.is_aborted() {
+			self.lookup.remove(&sequence);
+			return true;
+		}
+		if Some(sequence) == self.latest_group || now.saturating_sub(slot.group.cache_accessed()) <= max_ticks {
+			return false;
+		}
+		// Take the group out of the cache and abort it, so any consumer still
+		// reading surfaces `Error::Old` instead of blocking forever on a frame that
+		// will never arrive.
+		let slot = self.lookup.remove(&sequence).unwrap();
+		let _ = slot.group.abort(Error::Old);
+		true
 	}
 
 	/// Admit a freshly-created group: settle eviction debt first (so the newcomer
@@ -3094,6 +3115,34 @@ mod test {
 		assert_eq!(got.sequence, seq);
 		assert_eq!(got.timestamp, ts);
 		assert_eq!(&got.payload[..], b"payload");
+	}
+
+	/// At a few groups per second the eviction order holds more dead entries than live
+	/// ones, so a rotating window alone would revisit an expired group only after
+	/// newer ones had already gone: the cache became a contiguous tail with stragglers
+	/// below a hole, and a subscriber replaying history got the stragglers, a gap, then
+	/// the tail. Draining the front keeps expiry in order.
+	#[tokio::test]
+	async fn expiry_leaves_a_contiguous_tail() {
+		tokio::time::pause();
+
+		let mut producer = track_producer("chat", None);
+		for i in 0..330u64 {
+			let mut group = producer.append_group().unwrap();
+			group
+				.write_frame(Timestamp::from_millis(i * 333).unwrap(), b"x".as_slice())
+				.unwrap();
+			group.finish().unwrap();
+			tokio::time::advance(Duration::from_millis(333)).await;
+
+			let live: Vec<u64> = producer.state.read().lookup.keys().copied().collect();
+			let (first, last) = (live[0], live[live.len() - 1]);
+			assert_eq!(
+				live.len() as u64,
+				last - first + 1,
+				"a hole in the cache at write {i}: {live:?}"
+			);
+		}
 	}
 
 	#[tokio::test]
