@@ -11,8 +11,7 @@ consumable by an embedder.
 
 ## Plan
 
-- Open with an evaluation, spike-backed like the
-  [WebRTC bridge verdict](/quest/m3/livekit-webrtc-bridge.md): drive a real
+- Open with a spike-backed evaluation: drive a real
   inbound call through the candidate full Rust SIP stacks (ezk-sip, rvoip,
   and whatever else is current) and adopt the one that holds up. Fallback if
   none do: an existing parser crate (e.g. rsip) for message/SDP syntax plus a
@@ -31,3 +30,5 @@ consumable by an embedder.
   so every embedder gets answer-with-silence for free.
 - The SIP edge gateway and line provisioning that consume this crate as an
   inbound-call product are moq.pro (downstream) work.
+- [SIP DTMF](/quest/m3/sip-dtmf.md) and [SIP transfer](/quest/m3/sip-transfer.md) -
+  the extensions that lift the v1 boundaries above

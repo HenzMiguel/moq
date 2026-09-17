@@ -119,6 +119,11 @@ before format-specific metadata. Unrelated areas can proceed in parallel.
 - [JS track end](/quest/m2/2318-js-net-remaining-capability-gaps-vs-rs-moq-net-setup-role.md) - js/net declares a track end ahead of the live edge and observes the publisher's SUBSCRIBE_END
 - [E2EE](/quest/m2/e2ee/README.md) - TypeScript and Rust peers interoperate over encrypted broadcasts no relay can decrypt
 - [Processor](/quest/m2/processor/README.md) - a customer-run worker publishes an on-demand contribution with scoped access
+- [LiveKit Agents adapter (Python)](/quest/m2/livekit-agents-python.md) - a `livekit-agents` voice session runs against a MoQ relay through a MoQ audio input and output and an announce-prefix runner
+- [LiveKit client shim](/quest/m2/livekit-shim.md) - a drop-in `livekit-client` facade over `@moq/room`, media and core events first
+- [Data convention](/quest/m2/data-convention.md) - a `data` catalog section and one request/response shape, so rooms, teleop, and voice stop hand-rolling reply channels
+- [Active speaker](/quest/m2/room-active-speaker.md) - audio level and speaking signals on every room member
+- [LiveKit Agents adapter (Node)](/quest/m2/livekit-agents-node.md) - the Python adapter ported to `@livekit/agents`
 - [#3056](/quest/m2/3056-watch-video-decoder-captures-the-rewind-generation-at.md) - watch: the video decoder resets on a declared discontinuity
 - [#933](/quest/m2/933-video-rotation-metadata-not-propagated-from-mobile-camera.md) - the catalog rotation follows the live camera's orientation
 - [#2075](/quest/m2/2075-mirror-catalog-reservation-gating-in-moq-hang-js-hang.md) - @moq/publish gates the first catalog snapshot until every reserved track is described
