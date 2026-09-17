@@ -34,8 +34,8 @@ and the connect URL/token changed.
 - Tokens come from `@moq/room` `claims()`: publish under `<identity>/**`
   only, so participants cannot publish at each other's paths.
 - `publishData`, text and byte streams, and RPC throw a clear
-  not-implemented error in v1; they map onto the
-  [data convention](/quest/m2/data-convention.md) afterwards.
+  not-implemented error in v1; [shim data surfaces](/quest/m2/livekit-shim-data.md)
+  maps them onto the data convention afterwards.
 
 ## Related
 
