@@ -61,12 +61,12 @@ The framing is where the guarantee lives, not the subscription flags:
 
 ### Contents
 
-- The catalog section, through the shared
-  [data convention](/quest/m2/data-convention.md): `telemetry`, `command`,
-  and `rpc` are `data` entries the browser package can discover, which
-  supersedes the earlier plan of an app-private `CatalogExt` section
-  (`rs/moq-mux/src/catalog/tracks.rs`), and the `rpc` tracks are its
-  request/response shape rather than a teleop-only one.
+- The catalog section: `telemetry`, `command`, and `rpc` are entries in
+  the catalog's `json` section (#3109), which the browser package can
+  discover, superseding the earlier plan of an app-private `CatalogExt`
+  section (`rs/moq-mux/src/catalog/tracks.rs`); the `rpc` tracks are the
+  shared [data convention](/quest/m2/data-convention.md)'s request/response
+  shape rather than a teleop-only one.
 - Announce-prefix fan-in, generalised from `rs/moq-boy/src/input.rs`.
 - The two delivery classes, as `moq-json`'s snapshot and stream modes with
   the group structure and `Info::latency_max` each one needs.
@@ -84,7 +84,7 @@ control then it is the wrong abstraction.
 
 ## Required
 
-- [Data convention](/quest/m2/data-convention.md) - the catalog section and rpc shape the crate adopts
+- [Data convention](/quest/m2/data-convention.md) - the request/response shape the `rpc` tracks adopt
 
 ## Related
 

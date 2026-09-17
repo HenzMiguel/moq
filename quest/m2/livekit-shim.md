@@ -20,9 +20,12 @@ and the connect URL/token changed.
   announce/unannounce is its lifecycle. The shim groups the two broadcasts
   per identity into one RemoteParticipant and maps catalog entries to
   TrackPublications.
-- Build on `@moq/publish` and `@moq/watch`. LiveKit quality hints
-  (setVideoQuality, adaptive settings) map to the receiver-driven pixel
-  target, or no-op gracefully.
+- Build on `@moq/publish` and `@moq/watch`. LiveKit quality hints map to
+  the receiver-driven pixel target where they can (`setVideoQuality` picks
+  the rendition, `adaptiveStream` follows the rendered size); a hint the
+  target cannot express (`setVideoFPS`, per-layer bitrate caps) throws a
+  clear unsupported error rather than no-oping, so an app never believes a
+  limit is active.
 - v1 is identity-only: `participant.identity` comes from the path and muted
   state derives from catalog track presence. Names and coarse state come
   from `@moq/room`'s `hang/*.json` metadata in a follow-up, not a rival

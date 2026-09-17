@@ -1,50 +1,50 @@
-# [L] Data convention
+# [M] Data convention
 
 ## Goal
 
-One convention for application data beside media, so rooms, teleoperation,
-voice agents, and any app stop hand-rolling it: a `data` section in the hang
-catalog that makes a JSON or binary track discoverable and typed, and one
-request/response shape with correlation ids carried over those tracks.
-Implemented in `js/hang`, `rs/hang`, and `moq-json`, adopted by `@moq/room`
-chat, and written into `draft-lcurley-moq-hang`.
+One request/response convention over the catalog's existing `json` and
+`binary` data sections (#3109), so rooms, teleoperation, voice agents, and
+any app stop hand-rolling reply channels: a caller's `stream`-mode track of
+`{id, method, params}` answered on the callee's `stream`-mode track of
+`{id, ok, result}` or `{id, error}`, with the callee advertised in its
+catalog and the caller discovered from an announce prefix. The `window`
+mode moq-json already implements joins the catalog's known modes, every
+in-tree data track declares itself, and the hang draft carries all of it.
 
-Today the catalog root is audio and video only, `moq-json` carries snapshot,
-stream, and window modes with no way to advertise them, and three consumers
-each invented a reply channel: the Pipecat transport's fixed-name
-`transcript.json.z` track, teleop's proposed `rpc` tracks, and pronto's
-`status` echoing a command `sequence`.
+Today three consumers each invented a reply channel: the Pipecat
+transport's fixed-name `transcript.json.z` track, teleop's proposed `rpc`
+tracks, and pronto's `status` echoing a command `sequence`. `@moq/room`'s
+chat window is not in the catalog at all.
 
 ## Plan
 
-- Catalog: a `data` map in the root beside `video` and `audio`, keyed by
-  track name, each entry carrying `mode` (`snapshot`, `stream`, `window`, or
-  `datagram`), a free-form `schema` identifier the app owns, and the track
-  `Info` the reader needs (`timescale`, `priority`, `latency_max`). Rust
-  keeps `CatalogExt` for app-private sections; this is the shared,
-  browser-visible one.
-- Request/response: a caller publishes a `stream`-mode track of
-  `{id, method, params}` and the callee answers on its own `stream`-mode
-  track of `{id, ok, result}` or `{id, error}`. The callee advertises its
-  response track in its catalog; the caller is discovered from an announce
-  prefix, the direction teleop and Voice already use (operator publishes,
-  robot subscribes; `request/` and `response/` subtrees). Timeouts are the
-  caller's, and a lagged reader is told so; recovery after a reconnect
-  belongs to the application, never to a retry loop in the library.
-- Reliability is what `moq-net` gives: a group is one QUIC stream, so frames
-  in it are ordered and exactly once for a reader that keeps up, and
-  `MAX_GROUP_CACHE` bounds how far behind one may fall. Say that in the docs
-  instead of promising delivery.
-- Non-goals: byte-stream file transfer, delivery receipts, per-participant
-  addressing (a path and a scoped token already do that), and a cross-host
-  timebase (teleop's correlation quest).
-- Adopt it in-tree in the same change: `@moq/room` `Chat` declares its
-  window track in the section, and the JS and Rust examples
-  (`rs/moq-native/examples/chat.rs`, `rs/moq-json/examples/telemetry.rs`)
-  move onto it. The draft gains the section and the request/response shape.
-- Tests: catalog round trip in both languages, a request answered across a
-  local relay, a lagged caller surfacing the error, and an unknown `mode`
-  refused at parse.
+- Modes: add `window` (the retained run moq-json's `js/json/src/window`
+  writes) to `KnownMode` in `js/hang/src/catalog/mode.ts` and
+  `rs/hang/src/catalog/mode.rs`, so a chat window is readable by a generic
+  consumer. Datagram delivery is a track `Info` property, not a mode, and
+  stays out of the catalog.
+- Request/response: `moq-json` gains typed `Request`/`Response` producers
+  and consumers over its stream mode in JS and Rust: the caller keeps the
+  correlation id and its own timeout, the callee answers each id once, and
+  a lagged reader surfaces the error rather than retrying. Discovery is the
+  direction teleop and Voice already use: the callee's response track is a
+  `json` entry with a `schema` naming the method set, and callers are found
+  under an announce prefix (operator publishes, robot subscribes;
+  `request/` and `response/` subtrees).
+- Reliability is what `moq-net` gives (a group is one QUIC stream; a reader
+  that falls past `MAX_GROUP_CACHE` is told so). The docs say that instead
+  of promising delivery. Non-goals: byte-stream file transfer, delivery
+  receipts, per-participant addressing beyond a path and a scoped token,
+  and a cross-host timebase.
+- Adopt in the same change: `@moq/room` `Chat` declares its `window` track
+  in the `json` section; `rs/moq-native/examples/chat.rs` and
+  `rs/moq-json/examples/telemetry.rs` declare theirs; the draft gains the
+  `window` mode and the request/response shape. A catalog without data
+  sections parses unchanged, which the existing `deserialize_section`
+  leniency already guarantees.
+- Tests: `window` round trip in both languages, a request answered across a
+  local relay, a lagged caller surfacing the error, and an unknown mode
+  still passing through verbatim.
 
 ## Related
 
@@ -53,4 +53,4 @@ each invented a reply channel: the Pipecat transport's fixed-name
 - [LiveKit client shim](/quest/m2/livekit-shim.md) - `publishData`,
   streams, and RPC map onto this
 - [Catalog track identity](/quest/m3/catalog-tracks.md) - whatever it
-  decides about immutable definitions applies to `data` entries too
+  decides about immutable definitions applies to data entries too

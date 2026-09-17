@@ -121,7 +121,7 @@ before format-specific metadata. Unrelated areas can proceed in parallel.
 - [Processor](/quest/m2/processor/README.md) - a customer-run worker publishes an on-demand contribution with scoped access
 - [LiveKit Agents adapter (Python)](/quest/m2/livekit-agents-python.md) - a `livekit-agents` voice session runs against a MoQ relay through a MoQ audio input and output and an announce-prefix runner
 - [LiveKit client shim](/quest/m2/livekit-shim.md) - a drop-in `livekit-client` facade over `@moq/room`, media and core events first
-- [Data convention](/quest/m2/data-convention.md) - a `data` catalog section and one request/response shape, so rooms, teleop, and voice stop hand-rolling reply channels
+- [Data convention](/quest/m2/data-convention.md) - one request/response shape over the catalog's `json` and `binary` sections, plus the `window` mode, so rooms, teleop, and voice stop hand-rolling reply channels
 - [Active speaker](/quest/m2/room-active-speaker.md) - audio level and speaking signals on every room member
 - [LiveKit Agents adapter (Node)](/quest/m2/livekit-agents-node.md) - the Python adapter ported to `@livekit/agents`
 - [#3056](/quest/m2/3056-watch-video-decoder-captures-the-rewind-generation-at.md) - watch: the video decoder resets on a declared discontinuity
