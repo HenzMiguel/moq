@@ -1049,7 +1049,29 @@ where
 			// already advertised. The parameters exist only on a session that negotiated
 			// the extension; anywhere else they are the peer's violation.
 			held = match &held {
-				Some(current) => Some(msg.apply(current)),
+				Some(current) => {
+					// A different original publisher is a different advertisement, which
+					// the draft has withdrawn and made again: applying it in place would
+					// carry subscriptions across content that is not continuous. Refusing
+					// the update closes the stream, which is the withdrawal the peer owed.
+					if let Some(hops) = &msg.hops
+						&& hops.hops().iter().next() != current.hops.hops().iter().next()
+					{
+						tracing::warn!(%path, "publish_namespace update changes the publisher");
+						self.write_error(
+							stream,
+							msg.request_id,
+							&Error::Unsupported,
+							"a new publisher is a new advertisement",
+						)
+						.await?;
+						if stream.writer.finish().is_ok() {
+							let _ = stream.writer.closed().await;
+						}
+						return Ok(());
+					}
+					Some(msg.apply(current))
+				}
 				None if msg.hops.is_some() || msg.cost.is_some() => {
 					tracing::warn!(%path, "cluster parameters on a session that negotiated none");
 					return Err(Error::ProtocolViolation);
@@ -4789,6 +4811,53 @@ mod tests {
 		assert!(attached, "the caller releases the route it attached");
 		assert_eq!(replies(&log, ietf::RequestError::ID), 1, "REQUEST_ERROR went out");
 		assert_eq!(replies(&log, ietf::RequestOk::ID), 0);
+	}
+
+	/// An update whose first Hop ID differs names a different publisher, whose content
+	/// is not continuous with what is held. The draft has the sender withdraw and
+	/// advertise again instead, so the update is refused and the stream closed, which
+	/// is that withdrawal.
+	#[tokio::test]
+	async fn an_update_that_changes_the_publisher_is_refused() {
+		let self_origin = crate::Hop::new(5).unwrap();
+		let peer = peer_9();
+		let (clean, _) = clean_and_looped();
+		let other_publisher = cluster::Advert {
+			hops: hop_path(&[8, 9]),
+			cost: 0,
+		};
+
+		let script = publish_namespace_updates(&[other_publisher]).await;
+		let (mut subscriber, consumer, mut stream, driver) = update_harness(self_origin, &peer, &clean, script).await;
+		std::mem::forget(driver);
+		let log = subscriber.session.log.clone();
+
+		let path = crate::Path::new("room/host").to_owned();
+		let mut attached = true;
+		let mut result = None;
+		{
+			let mut run = std::pin::pin!(subscriber.run_publish_namespace_updates(
+				&mut stream,
+				&path,
+				Some(clean.clone()),
+				peer,
+				&mut attached,
+			));
+			for _ in 0..20 {
+				if let std::task::Poll::Ready(res) = futures::poll!(run.as_mut()) {
+					result = Some(res);
+					break;
+				}
+				settle().await;
+			}
+		}
+
+		assert!(matches!(result, Some(Ok(()))), "refused cleanly, got {result:?}");
+		assert_eq!(replies(&log, ietf::RequestError::ID), 1, "REQUEST_ERROR went out");
+		assert_eq!(replies(&log, ietf::RequestOk::ID), 0);
+		let route = routed_now(&consumer, "room/host").expect("the caller releases the route");
+		let hops: Vec<_> = route.hops.iter().map(|h| h.id()).collect();
+		assert_eq!(hops, vec![7, 9], "the held path was not replaced");
 	}
 
 	/// A second PUBLISH_NAMESPACE on the stream that already carries one is not an

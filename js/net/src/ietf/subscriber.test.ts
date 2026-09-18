@@ -452,12 +452,14 @@ test("a PUBLISH_NAMESPACE update that starts looping back is detached", async ()
 	const announced = subscriber.announced();
 	await acceptSubscribeNamespace(pair.client);
 
+	// Published by 11, relayed by the peer. Every update keeps that publisher.
+	const publisher = HopSchema.parse(11n);
 	const request = await Stream.open(pair.server, { version: VERSION });
 	const handler = subscriber.runPublishNamespace(
 		new PublishNamespace({
 			requestId: 0n,
 			trackNamespace: Path.from("theirs"),
-			cluster: { hops: [PEER], cost: 0n },
+			cluster: { hops: [publisher, PEER], cost: 0n },
 		}),
 		request,
 	);
@@ -470,15 +472,18 @@ test("a PUBLISH_NAMESPACE update that starts looping back is detached", async ()
 
 	// The peer re-parents the namespace onto a route that runs back through us.
 	await peer.writer.u53(PublishNamespaceUpdate.id);
-	await new PublishNamespaceUpdate({ requestId: 3n, update: { hops: [SELF, PEER] } }).encode(peer.writer, VERSION);
+	await new PublishNamespaceUpdate({ requestId: 3n, update: { hops: [publisher, SELF, PEER] } }).encode(
+		peer.writer,
+		VERSION,
+	);
 
 	expect(await announced.next()).toMatchObject({ pattern: Path.Pattern.subtree(Path.from("theirs")), active: false });
 	expect(await peer.reader.u53()).toBe(RequestOk.id);
 	await RequestOk.decode(peer.reader, VERSION);
 
-	// A clean path again, carrying only the cost: the path it lands on is the one held.
+	// A clean path again, with the cost alongside: the path it lands on is the one held.
 	await peer.writer.u53(PublishNamespaceUpdate.id);
-	await new PublishNamespaceUpdate({ requestId: 5n, update: { hops: [PEER], cost: 0n } }).encode(
+	await new PublishNamespaceUpdate({ requestId: 5n, update: { hops: [publisher, PEER], cost: 0n } }).encode(
 		peer.writer,
 		VERSION,
 	);
@@ -527,6 +532,48 @@ test("a PUBLISH_NAMESPACE repricing is acknowledged in place", async () => {
 
 	// Still announced: the stream ending is what retracts it.
 	peer.close();
+	await handler;
+	expect(await announced.next()).toMatchObject({ pattern: Path.Pattern.subtree(Path.from("theirs")), active: false });
+});
+
+/**
+ * An update whose first Hop ID differs names a different publisher, whose content is not
+ * continuous with what is held. The draft has the sender withdraw and advertise again
+ * instead, so the update is refused and the stream closed, which is that withdrawal.
+ */
+test("a PUBLISH_NAMESPACE update that changes the publisher is refused", async () => {
+	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const session = new NativeSession(pair.server, VERSION, true);
+	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
+
+	const announced = subscriber.announced();
+	await acceptSubscribeNamespace(pair.client);
+
+	const request = await Stream.open(pair.server, { version: VERSION });
+	const handler = subscriber.runPublishNamespace(
+		new PublishNamespace({
+			requestId: 0n,
+			trackNamespace: Path.from("theirs"),
+			cluster: { hops: [HopSchema.parse(11n), PEER], cost: 0n },
+		}),
+		request,
+	);
+	expect(await announced.next()).toMatchObject({ pattern: Path.Pattern.subtree(Path.from("theirs")), active: true });
+
+	const peer = await nextStream(pair.client);
+	if (!peer) throw new Error("no PUBLISH_NAMESPACE stream");
+	expect(await peer.reader.u53()).toBe(RequestOk.id);
+	await RequestOk.decode(peer.reader, VERSION);
+
+	await peer.writer.u53(PublishNamespaceUpdate.id);
+	await new PublishNamespaceUpdate({ requestId: 3n, update: { hops: [HopSchema.parse(8n), PEER] } }).encode(
+		peer.writer,
+		VERSION,
+	);
+	expect(await peer.reader.u53()).toBe(RequestError.id);
+	await RequestError.decode(peer.reader, VERSION);
+
+	// The refusal closed the stream, which withdrew the advertisement.
 	await handler;
 	expect(await announced.next()).toMatchObject({ pattern: Path.Pattern.subtree(Path.from("theirs")), active: false });
 });
