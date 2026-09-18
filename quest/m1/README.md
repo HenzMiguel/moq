@@ -28,6 +28,7 @@ does not require it.
 - [Bindings announce match](/quest/m1/api-origin-scopes.md) - every binding takes a pattern scope and reports the announce match with its captures
 - [PathPrefixes](/quest/m1/api-path-prefixes.md) - the unused moq_net::PathPrefixes type is deleted before the release
 - [moq-tokio names](/quest/m1/api-tokio-names.md) - moq-tokio's public names sit under their modules with no root compounds, adapter names, or forgettable close()
+- [Cluster -01](/quest/m1/cluster-01/README.md) - rs/moq-net and js/net speak the revised cluster extension (HOP_ID, REQUEST_UPDATE repricing) and -01 is published
 - [Track demand](/quest/m1/libmoq-track-demand.md) - a C publisher sees used/unused per track and serves dynamic track and group requests, so an encoder runs only while someone watches
 - [Python teardown panic](/quest/m1/py-smoke-teardown-panic.md) - the python smoke pair never aborts the moq-ffi thread on subscriber teardown
 - [Merge dev](/quest/m1/merge-dev.md) - dev lands on main with a closing keyword for every issue it fixed

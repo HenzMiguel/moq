@@ -1,3 +1,4 @@
+import { ProtocolViolation, reason } from "../error.ts";
 import type * as Path from "../path.ts";
 import type { Reader, Writer } from "../stream.ts";
 import * as Cluster from "./cluster.ts";
@@ -118,7 +119,13 @@ export class PublishNamespaceUpdate {
 		if (version === Version.DRAFT_17) {
 			await r.u62(); // required_request_id_delta (draft-17 only, removed in draft-18 per #1615)
 		}
-		const params = await Parameters.decode(r, version);
+		// A malformed block is the peer's violation, as it is on the advertisement itself.
+		let params: Parameters;
+		try {
+			params = await Parameters.decode(r, version);
+		} catch (err) {
+			throw new ProtocolViolation(reason(err), { cause: err });
+		}
 		return new PublishNamespaceUpdate({ requestId, update: Cluster.updateFromParams(params) });
 	}
 }
