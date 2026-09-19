@@ -29,7 +29,6 @@ This file is split into nested `CLAUDE.md` files based on the language/situation
 - Any AI comments may be challenged, and not confused with human maintainers.
 - Prompt the user to decide when unsure, but always provide recommendations.
 
-
 # Guidelines
 
 - Prefer a maintained crate over hand-rolling non-core functionality.
