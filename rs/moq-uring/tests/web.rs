@@ -235,13 +235,14 @@ fn lite_session_over_webtransport() {
 		Box::pin(async move {
 			assert_eq!(session.protocol(), Some(PROTO), "negotiated subprotocol");
 			let (sub_origin, sub_driver) = origin::Producer::new(origin::Config::new(moq_net::Hop::random()));
-			let driver = tokio::spawn(sub_driver.run(moq_tokio::runtime::Runtime::<()>::new()));
+			let driver = tokio::spawn(sub_driver.run(moq_tokio::runtime::Runtime::new()));
 
-			let moq = moq_net::Client::new()
+			let (moq, session_driver) = moq_net::Client::new()
 				.with_subscriber(sub_origin.clone())
 				.connect_lite(moq_tokio::runtime::Runtime::new(), session)
 				.await
 				.expect("connect_lite");
+			tokio::spawn(session_driver);
 
 			let bc = {
 				let consumer = sub_origin.consume();
@@ -281,11 +282,14 @@ fn lite_session_over_webtransport() {
 			}
 			let session = request.respond(response).await.expect("respond");
 
-			let session = moq_net::Server::new()
+			let (session, driver) = moq_net::Server::new()
 				.with_publisher(&serve_origin)
 				.accept_lite(handle.clone(), session)
 				.await
 				.expect("accept_lite");
+			handle.spawn(async move {
+				let _ = driver.await;
+			});
 			session.closed().await;
 		})
 		.expect("worker");

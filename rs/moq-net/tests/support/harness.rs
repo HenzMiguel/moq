@@ -2,44 +2,28 @@
 //! [`moq_net::Session`]s over the in-memory mock transport.
 //!
 //! The harness runs the full MoQ handshake (Client::connect + Server::accept)
-//! over a [`MockSession`] pair and spawns both protocol drivers, giving tests
+//! over a [`super::mock::MockSession`] pair and spawns both protocol drivers, giving tests
 //! two live sessions ready for pub/sub without any real QUIC or network I/O.
 
 #![allow(dead_code)]
 
-use std::{marker::PhantomData, pin::Pin, task::Poll};
+use std::{pin::Pin, task::Poll};
 
 use moq_net::{Client, Server, Session, Version, origin};
 
-use super::mock::{MockSession, create_mock_session_pair};
+use super::mock::create_mock_session_pair;
 
-/// A tokio-backed [`moq_net::runtime::Runtime`] for these tests: machines are
-/// spawned onto tokio and timers are tokio sleeps, so `tokio::time::pause` keeps
-/// working. A copy of the crate's own `runtime::tokio_test` module, which is
-/// `cfg(test)` and therefore invisible to integration tests.
-pub struct TokioRuntime<S = MockSession>(PhantomData<fn(S)>);
+/// Tokio's clock and timers for these tests.
+#[derive(Clone, Default)]
+pub struct TokioRuntime;
 
-impl<S> TokioRuntime<S> {
+impl TokioRuntime {
 	pub fn new() -> Self {
-		Self(PhantomData)
+		Self
 	}
 }
 
-impl<S> Clone for TokioRuntime<S> {
-	fn clone(&self) -> Self {
-		Self(PhantomData)
-	}
-}
-
-impl<S> Default for TokioRuntime<S> {
-	fn default() -> Self {
-		Self::new()
-	}
-}
-
-// Unbounded: timers don't involve the transport, so origin drivers can borrow
-// a transportless handle (`TokioRuntime::<()>::new()`).
-impl<S> moq_net::runtime::Timers for TokioRuntime<S> {
+impl moq_net::runtime::Timers for TokioRuntime {
 	type Timer = TokioTimer;
 
 	fn timer(&self) -> Self::Timer {
@@ -48,15 +32,6 @@ impl<S> moq_net::runtime::Timers for TokioRuntime<S> {
 
 	fn now(&self) -> moq_net::runtime::Instant {
 		tokio::time::Instant::now().into_std()
-	}
-}
-
-// Boxable: tokio work-steals, so the machine must be `Send`.
-impl<S: moq_net::transport::poll::Boxable> moq_net::runtime::Runtime for TokioRuntime<S> {
-	type Transport = S;
-
-	fn spawn(&self, machine: moq_net::runtime::Machine<Self>) {
-		tokio::spawn(machine);
 	}
 }
 
@@ -151,21 +126,25 @@ pub async fn connect_mock(opts: MockConnectOptions) -> MockPair {
 		server = server.with_subscriber(subscribe);
 	}
 
-	// Run both handshakes concurrently; the runtime spawns each side's machine
+	// Run both handshakes concurrently and spawn each side's driver
 	// the moment its handshake resolves: on draft-17+ the server's accept blocks
 	// on the client's SETUP, which only reaches the wire once the client's
 	// machine is polled (and vice versa for the server's own SETUP).
 	let client_fut = async {
-		client
+		let (session, driver) = client
 			.connect(TokioRuntime::new(), client_transport)
 			.await
-			.expect("client handshake failed")
+			.expect("client handshake failed");
+		tokio::spawn(driver);
+		session
 	};
 	let server_fut = async {
-		server
+		let (session, driver) = server
 			.accept(TokioRuntime::new(), server_transport)
 			.await
-			.expect("server handshake failed")
+			.expect("server handshake failed");
+		tokio::spawn(driver);
+		session
 	};
 	let (client_session, server_session) = tokio::join!(client_fut, server_fut);
 

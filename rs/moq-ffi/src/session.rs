@@ -291,14 +291,18 @@ impl Client {
 		}
 		.map_err(|err| MoqError::Connect(format!("{err}")))?;
 
-		// The runtime spawns the protocol machine on the microtask queue. The machine
+		// Run the driver on the microtask queue. The driver
 		// holds no session clone, so dropping the last handle still closes the
 		// transport and ends that task.
-		let session = moq_net::Client::new()
+		let (session, driver) = moq_net::Client::new()
 			.with_publisher(&publish)
 			.with_subscriber(subscribe.clone())
 			.connect(crate::runtime::Runtime, transport)
 			.await?;
+
+		crate::ffi::spawn(async move {
+			let _ = driver.await;
+		});
 
 		Ok(Arc::new(MoqSession::accepted(session, publish, subscribe)))
 	}

@@ -17,9 +17,9 @@ that path is unrelated to this crate.)
 
 What works today:
 
-- **The architecture is right.** `moq-net` is generic over
-  `web_transport_trait::poll::Session` and spawns via `web_async::spawn` (not
-  `tokio::spawn`), so it is not tied to native QUIC.
+- **Executor-independent sessions.** `moq-net` is generic over
+  `web_transport_trait::poll::Session` and returns a driver for the caller to
+  run. `moq-wasm` spawns that driver via `web_async::spawn` on the browser.
 - **The browser transport needs no adapter**: `web-transport-wasm` implements
   the poll traits `moq-net` consumes, so `src/transport.rs` is just the dial
   (the ALPN list and the browser's two trust modes).

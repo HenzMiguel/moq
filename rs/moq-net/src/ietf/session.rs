@@ -15,7 +15,7 @@ use super::{
 };
 
 /// Everything one moq-transport session needs to start.
-pub struct Config<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+pub struct Config<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	/// The runtime that arms the session's timers.
 	pub runtime: R,
 
@@ -71,7 +71,7 @@ pub fn start<S, R>(
 ) -> Result<(MaybeSendBox<'static, Result<(), Error>>, crate::goaway::Handle), Error>
 where
 	S: crate::transport::poll::Boxable,
-	R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
 	let Config {
@@ -514,7 +514,7 @@ fn peer_from_params(params: &ietf::Parameters, version: Version) -> Result<peer:
 /// server passes `None`. `self_origin` and `cost` are the MoQ Cluster options, which
 /// declare our identity and (client-only) what this link costs to cross. The MoQ Solicit
 /// declaration is unconditional, so it takes no argument.
-async fn run_setup<S: crate::transport::poll::Session, R: crate::runtime::Runtime>(
+async fn run_setup<S: crate::transport::poll::Session, R: crate::runtime::Timers>(
 	runtime: R,
 	mut session: S,
 	version: Version,
@@ -600,7 +600,7 @@ async fn run_unis<S, R>(
 ) -> Result<(), Error>
 where
 	S: crate::transport::poll::Boxable,
-	R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
 	let outer_version = crate::Version::Ietf(version);
@@ -711,7 +711,7 @@ async fn run_uni_group<S, R>(
 ) -> Result<(), Error>
 where
 	S: crate::transport::poll::Boxable,
-	R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
 	let kind: u64 = stream.decode_peek().await?;
@@ -742,7 +742,7 @@ async fn run_dispatch<S, R>(
 ) -> Result<(), Error>
 where
 	S: crate::transport::poll::Boxable,
-	R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
 	// PUBLISH_NAMESPACE decodes differently once the MoQ Cluster extension is
@@ -886,7 +886,7 @@ mod tests {
 
 	/// The tokio-backed test runtime. Its transport parameter is phantom, so one
 	/// type serves every fake session in this module.
-	type TestRuntime = crate::runtime::tokio_test::Tokio<crate::lite::test_transport::SinkSession>;
+	type TestRuntime = crate::runtime::tokio_test::Tokio;
 
 	fn occurrences(log: &crate::lite::test_transport::Log, needle: &[u8]) -> usize {
 		let writes = log.writes.lock().unwrap();

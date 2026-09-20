@@ -11,7 +11,7 @@ use super::{
 	DataType, PeerSetup, Publisher, PublisherConfig, Setup, Subscriber, SubscriberConfig, SubscriberDriver, Version,
 };
 
-pub(crate) struct SessionStart<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+pub(crate) struct SessionStart<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	pub recv_bandwidth: Option<bandwidth::Consumer>,
 	/// The session's protocol machine, named so its `Send`-ness stays inferred
 	/// from the transport instead of being fixed by a box.
@@ -50,7 +50,7 @@ pub async fn accept_setup<S: crate::transport::poll::Session>(
 }
 
 /// Everything one moq-lite session needs to start.
-pub struct Config<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+pub struct Config<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	/// The runtime that arms the session's timers.
 	pub runtime: R,
 
@@ -94,7 +94,7 @@ pub struct Config<S: crate::transport::poll::Session, R: crate::runtime::Runtime
 pub fn start<S, R>(config: Config<S, R>) -> Result<SessionStart<S, R>, Error>
 where
 	S: crate::transport::poll::Session,
-	R: crate::runtime::Runtime,
+	R: crate::runtime::Timers,
 {
 	let Config {
 		runtime,
@@ -208,7 +208,7 @@ where
 
 /// The lite session driver: one poll function racing every protocol arm, in
 /// place of a task set of boxed futures.
-pub(crate) struct Driver<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+pub(crate) struct Driver<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	/// Advertising our capabilities, or `None` once sent (or on a version with no
 	/// Setup Stream).
 	setup: Option<SendSetup<S>>,
@@ -227,7 +227,7 @@ pub(crate) struct Driver<S: crate::transport::poll::Session, R: crate::runtime::
 impl<S, R> Driver<S, R>
 where
 	S: crate::transport::poll::Session,
-	R: crate::runtime::Runtime,
+	R: crate::runtime::Timers,
 {
 	pub(crate) fn poll(&mut self, waiter: &kio::Waiter) -> Poll<Result<(), Error>> {
 		let res = std::task::ready!(self.poll_protocol(waiter));
@@ -371,7 +371,7 @@ impl<S: crate::transport::poll::Session> SendSetup<S> {
 /// Runs on every version, including those with no GOAWAY message: the deadline is
 /// the sender's own timer, so a caller draining a lite-03 peer still gets the
 /// session closed on schedule; the peer just never learns why.
-struct SendGoaway<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+struct SendGoaway<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	version: Version,
 	runtime: R,
 	goaway: crate::goaway::Protocol,
@@ -382,7 +382,7 @@ struct SendGoaway<S: crate::transport::poll::Session, R: crate::runtime::Runtime
 	state: SendGoawayState<S, R>,
 }
 
-enum SendGoawayState<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+enum SendGoawayState<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	/// Parked on the send trigger, racing the transport close so a parked trigger
 	/// never blocks the driver. The trigger fires at most once.
 	Waiting,
@@ -401,7 +401,7 @@ enum SendGoawayState<S: crate::transport::poll::Session, R: crate::runtime::Runt
 	Enforce(crate::goaway::Enforce<S, R>),
 }
 
-impl<S: crate::transport::poll::Session, R: crate::runtime::Runtime> SendGoaway<S, R> {
+impl<S: crate::transport::poll::Session, R: crate::runtime::Timers> SendGoaway<S, R> {
 	fn new(runtime: R, session: S, goaway: crate::goaway::Protocol, version: Version) -> Self {
 		Self {
 			version,

@@ -220,7 +220,7 @@ enum NamespaceEvent {
 }
 
 #[derive(Clone)]
-pub(super) struct Publisher<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+pub(super) struct Publisher<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	// Arms the advertise, retry, and linger timers.
 	runtime: R,
 	session: S,
@@ -276,7 +276,7 @@ impl Drop for Join {
 impl<S, R> Publisher<S, R>
 where
 	S: crate::transport::poll::Boxable,
-	R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
 	pub fn new(
@@ -2526,7 +2526,7 @@ mod serve_tests {
 	use crate::lite::test_transport::{Log, ScriptedSession, SinkSession};
 	use crate::model::ProduceTest;
 
-	type TestRuntime = crate::runtime::tokio_test::Tokio<ScriptedSession>;
+	type TestRuntime = crate::runtime::tokio_test::Tokio;
 
 	fn occurrences(log: &Log, needle: &[u8]) -> usize {
 		let writes = log.writes.lock().unwrap();
@@ -3373,7 +3373,7 @@ mod tests {
 
 	/// The tokio-backed test runtime. Its transport parameter is phantom, so one
 	/// type serves every fake session in this module.
-	type TestRuntime = crate::runtime::tokio_test::Tokio<SinkSession>;
+	type TestRuntime = crate::runtime::tokio_test::Tokio;
 
 	async fn settle() {
 		tokio::time::sleep(Duration::from_millis(1)).await;

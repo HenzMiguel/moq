@@ -206,7 +206,7 @@ impl MoqOriginProducer {
 pub(crate) fn spawn(config: moq_net::origin::Config) -> moq_net::origin::Producer {
 	let (producer, driver) = moq_net::origin::Producer::new(config);
 	#[cfg(not(target_arch = "wasm32"))]
-	crate::ffi::spawn(driver.run(moq_tokio::runtime::Runtime::<()>::new()));
+	crate::ffi::spawn(driver.run(moq_tokio::runtime::Runtime::new()));
 	#[cfg(target_arch = "wasm32")]
 	crate::ffi::spawn(driver.run(crate::runtime::Runtime));
 	producer

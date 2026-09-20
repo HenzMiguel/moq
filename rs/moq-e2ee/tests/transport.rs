@@ -12,7 +12,7 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn produce_origin(hop: u64) -> moq_net::origin::Producer {
 	let (producer, driver) = moq_net::origin::Producer::new(moq_net::origin::Config::new(Hop::new(hop).unwrap()));
-	tokio::spawn(driver.run(TokioRuntime::<()>::new()));
+	tokio::spawn(driver.run(TokioRuntime::new()));
 	producer
 }
 

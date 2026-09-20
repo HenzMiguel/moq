@@ -9,9 +9,7 @@ use crate::{
 	ietf, lite, setup, stats,
 };
 
-// The transport methods are called on the projected `R::Transport`, which needs the
-// trait itself in scope (a plain type parameter would not).
-use web_transport_trait::{MaybeSend, MaybeSync, poll::Session as _};
+use web_transport_trait::{MaybeSend, MaybeSync};
 
 /// A MoQ server session builder.
 #[derive(Default, Clone)]
@@ -79,17 +77,18 @@ impl Server {
 	}
 
 	/// Start a lite session on an accepted transport: wire the origins, answer
-	/// with our SETUP, and hand the machine to the runtime.
-	fn start_lite<R>(
+	/// with our SETUP, and return the session and its driver.
+	fn start_lite<S, R>(
 		&self,
 		runtime: R,
-		session: R::Transport,
+		session: S,
 		version: lite::Version,
 		client_setup: Option<lite::Setup>,
 		peer_hop: Option<crate::Hop>,
-	) -> Result<Session, Error>
+	) -> Result<(Session, crate::Driver<S, R>), Error>
 	where
-		R: crate::runtime::Runtime + 'static,
+		S: crate::transport::poll::Session,
+		R: crate::runtime::Timers + 'static,
 	{
 		let (publish, subscribe) = self.stat_tagged_origins();
 
@@ -121,12 +120,12 @@ impl Server {
 			peer_setup: client_setup,
 		})?;
 
-		Ok(Session::spawn(
+		Ok(Session::new(
 			runtime,
 			session,
 			version.into(),
 			start.recv_bandwidth,
-			crate::runtime::Protocol::Lite(Box::new(start.driver)),
+			crate::driver::Protocol::Lite(Box::new(start.driver)),
 			start.goaway,
 		))
 	}
@@ -139,9 +138,10 @@ impl Server {
 	/// with [`Error::Version`]). Completes the handshake immediately; a caller
 	/// gating on the advertised path uses
 	/// [`accept_request_lite`](Self::accept_request_lite) instead.
-	pub async fn accept_lite<R>(&self, runtime: R, session: R::Transport) -> Result<Session, Error>
+	pub async fn accept_lite<S, R>(&self, runtime: R, session: S) -> Result<(Session, crate::Driver<S, R>), Error>
 	where
-		R: crate::runtime::Runtime + 'static,
+		S: crate::transport::poll::Session,
+		R: crate::runtime::Timers + 'static,
 	{
 		self.accept_request_lite(runtime, session).await?.ok().await
 	}
@@ -151,13 +151,10 @@ impl Server {
 	/// which is what drops the thread-affinity bounds: a pinned `!Send`
 	/// transport can gate on the advertised path too. Anything but a moq-lite
 	/// ALPN is refused with [`Error::Version`].
-	pub async fn accept_request_lite<R>(
-		&self,
-		runtime: R,
-		mut session: R::Transport,
-	) -> Result<Handshake<R::Transport, R>, Error>
+	pub async fn accept_request_lite<S, R>(&self, runtime: R, mut session: S) -> Result<Handshake<S, R>, Error>
 	where
-		R: crate::runtime::Runtime + 'static,
+		S: crate::transport::poll::Session,
+		R: crate::runtime::Timers + 'static,
 	{
 		let (path, role, origin, handshake) = match session.protocol() {
 			Some(alpn @ (ALPN_LITE_05 | ALPN_LITE_06_WIP)) => {
@@ -226,21 +223,20 @@ impl Server {
 		})
 	}
 
-	/// Perform the MoQ handshake as a server, returning the [`Session`].
+	/// Perform the MoQ handshake as a server, returning the [`Session`] and its [`Driver`](crate::Driver).
 	///
-	/// The session's protocol machine is handed to `runtime`
-	/// ([`Runtime::spawn`](crate::runtime::Runtime::spawn)), so there is nothing
-	/// else to drive.
+	/// Poll or spawn the returned driver to run the session. `runtime` supplies
+	/// only its clock and timers.
 	///
 	/// Convenience wrapper over [`accept_request`](Self::accept_request) that
 	/// completes the handshake immediately. Use `accept_request` when you need to
 	/// inspect the client's advertised path before deciding what to serve.
-	pub async fn accept<R>(&self, runtime: R, session: R::Transport) -> Result<Session, Error>
+	pub async fn accept<S, R>(&self, runtime: R, session: S) -> Result<(Session, crate::Driver<S, R>), Error>
 	where
-		R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
-		R::Transport: crate::transport::poll::Boxable,
-		<R::Transport as web_transport_trait::poll::Session>::SendStream: MaybeSync,
-		<R::Transport as web_transport_trait::poll::Session>::RecvStream: MaybeSync,
+		S: crate::transport::poll::Boxable,
+		R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
+		S::SendStream: MaybeSync,
+		S::RecvStream: MaybeSync,
 		R::Timer: MaybeSend,
 	{
 		self.accept_request(runtime, session).await?.ok().await
@@ -256,16 +252,12 @@ impl Server {
 	///
 	/// The path is surfaced for moq-lite-05 and every moq-transport draft we speak;
 	/// it's empty on versions with no in-band request path (e.g. lite 01-04).
-	pub async fn accept_request<R>(
-		&self,
-		runtime: R,
-		mut session: R::Transport,
-	) -> Result<Handshake<R::Transport, R>, Error>
+	pub async fn accept_request<S, R>(&self, runtime: R, mut session: S) -> Result<Handshake<S, R>, Error>
 	where
-		R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
-		R::Transport: crate::transport::poll::Boxable,
-		<R::Transport as web_transport_trait::poll::Session>::SendStream: MaybeSync,
-		<R::Transport as web_transport_trait::poll::Session>::RecvStream: MaybeSync,
+		S: crate::transport::poll::Boxable,
+		R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
+		S::SendStream: MaybeSync,
+		S::RecvStream: MaybeSync,
 		R::Timer: MaybeSend,
 	{
 		let (encoding, supported) = match session.protocol() {
@@ -373,17 +365,17 @@ impl Server {
 
 	/// Read a draft-17/18 client's SETUP (with its request path) off its uni stream,
 	/// then pause. `ok()` starts the session and hands the stream back for GOAWAY.
-	async fn accept_ietf_modern<R>(
+	async fn accept_ietf_modern<S, R>(
 		&self,
 		runtime: R,
-		mut session: R::Transport,
+		mut session: S,
 		version: ietf::Version,
-	) -> Result<Handshake<R::Transport, R>, Error>
+	) -> Result<Handshake<S, R>, Error>
 	where
-		R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
-		R::Transport: crate::transport::poll::Boxable,
-		<R::Transport as web_transport_trait::poll::Session>::SendStream: MaybeSync,
-		<R::Transport as web_transport_trait::poll::Session>::RecvStream: MaybeSync,
+		S: crate::transport::poll::Boxable,
+		R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
+		S::SendStream: MaybeSync,
+		S::RecvStream: MaybeSync,
 		R::Timer: MaybeSend,
 	{
 		let peer_setup = ietf::accept_setup(&mut session, version).await?;
@@ -414,7 +406,7 @@ impl Server {
 /// the origins to serve, then call [`ok`](Self::ok) to complete the handshake, or
 /// [`close`](Self::close) to reject it. Modeled on the WebTransport `Request` in
 /// moq-tokio.
-pub struct Handshake<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+pub struct Handshake<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	path: Option<String>,
 	role: Option<Role>,
 	origin: Option<crate::Hop>,
@@ -427,16 +419,16 @@ pub struct Handshake<S: crate::transport::poll::Session, R: crate::runtime::Runt
 }
 
 /// The parts of a [`Handshake`] consumed by [`Handshake::ok`] / [`Handshake::close`].
-struct RequestInner<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+struct RequestInner<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	server: Server,
-	/// Receives the session's machine once `ok()` completes the handshake.
+	/// Supplies the clock and timers for the accepted session.
 	runtime: R,
 	handshake: PausedHandshake<S, R>,
 }
 
 /// The handshake state captured at the pause point. Every variant defers its
 /// session start to [`Handshake::ok`] so origins set on the handshake still apply.
-enum PausedHandshake<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+enum PausedHandshake<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	/// moq-lite 03/04: no Setup Stream.
 	LiteBare { session: S, version: lite::Version },
 	/// moq-lite 05+: the client's Setup Stream has been read. `ok()` starts the
@@ -452,8 +444,10 @@ enum PausedHandshake<S: crate::transport::poll::Session, R: crate::runtime::Runt
 	/// futures, which forces a per-target `Send` choice a pinned `!Send`
 	/// transport cannot satisfy, so the choice is made here, at construction,
 	/// where the caller proved the bounds.
-	Boxed(Box<dyn Paused<R>>),
+	Boxed(Box<dyn Paused<S, R>>),
 }
+
+type Accept<S, R> = crate::util::MaybeSendBox<'static, Result<(Session, crate::Driver<S, R>), Error>>;
 
 /// A paused non-lite handshake. See [`PausedHandshake::Boxed`] for why this is a
 /// trait object.
@@ -461,14 +455,9 @@ enum PausedHandshake<S: crate::transport::poll::Session, R: crate::runtime::Runt
 /// `MaybeSync` is not decoration: a caller holding a [`Handshake`] across an
 /// await behind `&self` (moq-relay authenticates that way) needs
 /// `&Handshake: Send`, which is `Handshake: Sync`, which is this.
-trait Paused<R: crate::runtime::Runtime>: MaybeSend + MaybeSync {
+trait Paused<S: crate::transport::poll::Session, R: crate::runtime::Timers>: MaybeSend + MaybeSync {
 	/// Complete the handshake with the final server config.
-	fn ok(
-		self: Box<Self>,
-		server: Server,
-		runtime: R,
-		peer_hop: Option<crate::Hop>,
-	) -> crate::util::MaybeSendBox<'static, Result<Session, Error>>;
+	fn ok(self: Box<Self>, server: Server, runtime: R, peer_hop: Option<crate::Hop>) -> Accept<S, R>;
 
 	/// Reject the handshake, closing the transport with `err`'s wire code.
 	fn close(self: Box<Self>, err: Error);
@@ -483,20 +472,15 @@ struct PausedIetfModern<S: crate::transport::poll::Session> {
 	peer_setup: ietf::PeerSetup<S>,
 }
 
-impl<S, R> Paused<R> for PausedIetfModern<S>
+impl<S, R> Paused<S, R> for PausedIetfModern<S>
 where
-	S: crate::transport::poll::Session + crate::transport::poll::Boxable,
+	S: crate::transport::poll::Boxable,
 	S::SendStream: MaybeSync,
 	S::RecvStream: MaybeSync,
-	R: crate::runtime::Runtime<Transport = S> + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
-	fn ok(
-		self: Box<Self>,
-		server: Server,
-		runtime: R,
-		peer_hop: Option<crate::Hop>,
-	) -> crate::util::MaybeSendBox<'static, Result<Session, Error>> {
+	fn ok(self: Box<Self>, server: Server, runtime: R, peer_hop: Option<crate::Hop>) -> Accept<S, R> {
 		use crate::util::MaybeBoxedExt as _;
 		async move {
 			let Self {
@@ -525,12 +509,12 @@ where
 				peer_declared: Some(peer_setup.declared),
 			})?;
 			tracing::debug!(?version, "connected");
-			Ok(Session::spawn(
+			Ok(Session::new(
 				runtime,
 				session,
 				version.into(),
 				None,
-				crate::runtime::Protocol::Ietf(protocol),
+				crate::driver::Protocol::Ietf(protocol),
 				goaway,
 			))
 		}
@@ -555,20 +539,15 @@ struct PausedLegacy<S: crate::transport::poll::Session> {
 	peer_declared: ietf::peer::Peer,
 }
 
-impl<S, R> Paused<R> for PausedLegacy<S>
+impl<S, R> Paused<S, R> for PausedLegacy<S>
 where
-	S: crate::transport::poll::Session + crate::transport::poll::Boxable,
+	S: crate::transport::poll::Boxable,
 	S::SendStream: MaybeSync,
 	S::RecvStream: MaybeSync,
-	R: crate::runtime::Runtime<Transport = S> + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
-	fn ok(
-		self: Box<Self>,
-		server: Server,
-		runtime: R,
-		peer_hop: Option<crate::Hop>,
-	) -> crate::util::MaybeSendBox<'static, Result<Session, Error>> {
+	fn ok(self: Box<Self>, server: Server, runtime: R, peer_hop: Option<crate::Hop>) -> Accept<S, R> {
 		use crate::util::MaybeBoxedExt as _;
 		async move {
 			let Self {
@@ -615,7 +594,7 @@ where
 					})?;
 					(
 						start.recv_bandwidth,
-						crate::runtime::Protocol::Lite(Box::new(start.driver)),
+						crate::driver::Protocol::Lite(Box::new(start.driver)),
 						start.goaway,
 					)
 				}
@@ -637,11 +616,11 @@ where
 						peer_setup_stream: None,
 						peer_declared: Some(peer_declared),
 					})?;
-					(None, crate::runtime::Protocol::Ietf(protocol), goaway)
+					(None, crate::driver::Protocol::Ietf(protocol), goaway)
 				}
 			};
 
-			Ok(Session::spawn(runtime, session, version, recv_bw, protocol, goaway))
+			Ok(Session::new(runtime, session, version, recv_bw, protocol, goaway))
 		}
 		.maybe_boxed()
 	}
@@ -655,7 +634,7 @@ where
 impl<S, R> Handshake<S, R>
 where
 	S: crate::transport::poll::Session,
-	R: crate::runtime::Runtime<Transport = S> + 'static,
+	R: crate::runtime::Timers + 'static,
 {
 	/// The request path the client advertised in its SETUP.
 	///
@@ -732,11 +711,10 @@ where
 		self.inner.as_mut().expect("request already responded")
 	}
 
-	/// Accept the session, returning the [`Session`].
+	/// Accept the session, returning the [`Session`] and its [`Driver`](crate::Driver).
 	///
-	/// The session's protocol machine is handed to the runtime given to
-	/// [`Server::accept_request`], so there is nothing else to drive.
-	pub async fn ok(mut self) -> Result<Session, Error> {
+	/// Poll or spawn the returned driver to run the session.
+	pub async fn ok(mut self) -> Result<(Session, crate::Driver<S, R>), Error> {
 		let peer_hop = Some(self.assigned_hop);
 		let RequestInner {
 			server,
@@ -764,7 +742,7 @@ where
 	}
 }
 
-impl<S: crate::transport::poll::Session, R: crate::runtime::Runtime> RequestInner<S, R> {
+impl<S: crate::transport::poll::Session, R: crate::runtime::Timers> RequestInner<S, R> {
 	fn close(self, err: Error) {
 		let mut session = match self.handshake {
 			PausedHandshake::LiteBare { session, .. } => session,
@@ -775,7 +753,7 @@ impl<S: crate::transport::poll::Session, R: crate::runtime::Runtime> RequestInne
 	}
 }
 
-impl<S: crate::transport::poll::Session, R: crate::runtime::Runtime> Drop for Handshake<S, R> {
+impl<S: crate::transport::poll::Session, R: crate::runtime::Timers> Drop for Handshake<S, R> {
 	// A dropped request would otherwise leave the client hanging until its idle
 	// timeout: it already sent SETUP and is waiting on a response. Reject loudly.
 	fn drop(&mut self) {
@@ -1141,7 +1119,8 @@ mod tests {
 			.announce("local-route", crate::origin::Route::default().with_hops(local_hops))
 			.unwrap();
 
-		let session = request.ok().await.unwrap();
+		let (session, driver) = request.ok().await.unwrap();
+		tokio::spawn(driver);
 
 		for _ in 0..100 {
 			if occurrences(&log, b"local-route") > 0 {

@@ -1,9 +1,8 @@
-//! The browser runtime: microtask spawning and `wasmtimer`-backed timers.
+//! Browser-backed timers for MoQ drivers.
 
 use std::{pin::Pin, task::Poll};
 
-/// The [`moq_net::Runtime`] for the browser: machines run on the microtask
-/// queue via `web_async::spawn`, timers are `setTimeout`-backed sleeps.
+/// Supplies the browser clock and timers to MoQ drivers.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Runtime;
 
@@ -12,18 +11,6 @@ impl moq_net::Timers for Runtime {
 
 	fn timer(&self) -> Self::Timer {
 		Timer { at: None, sleep: None }
-	}
-}
-
-impl moq_net::Runtime for Runtime {
-	type Transport = web_transport_wasm::Session;
-
-	fn spawn(&self, machine: moq_net::runtime::Machine<Self>) {
-		web_async::spawn(async move {
-			// The session surfaces the result through `closed()`; nothing to do
-			// with it here.
-			let _ = machine.await;
-		});
 	}
 }
 

@@ -16,8 +16,8 @@
 //! serves many connections on one socket (demuxed by connection id, dials
 //! included), each a [`quic::Connection`] implementing the transport traits,
 //! so `moq_net::Client::connect_lite` and `Server::accept_lite` run real
-//! moq-lite sessions on the worker ([`Handle`] is their
-//! [`moq_net::Runtime`]). The stack underneath is the `noq` (default),
+//! moq-lite sessions on the worker. [`Handle`] supplies [`moq_net::Timers`];
+//! callers run the returned drivers with [`Handle::spawn`]. The stack underneath is the `noq` (default),
 //! `quinn`, or `quiche` feature; the module is the same either way, and a build with
 //! neither leaves it out.
 //!

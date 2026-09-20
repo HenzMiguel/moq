@@ -756,7 +756,12 @@ async fn serve_connection(
 	if let Some(publish) = grants.publish {
 		request = request.with_subscriber(publish);
 	}
-	let session = request.ok().await?;
+	let (session, driver) = request.ok().await?;
+	handle.spawn(async move {
+		if let Err(err) = driver.await {
+			tracing::debug!(%err, "session driver ended");
+		}
+	});
 	let node_connection = peer_hop.map(|origin| serve.cluster.nodes.connect_inbound(id, origin));
 
 	tracing::info!(id, version = %session.version(), transport = %moq_tokio::Transport::Quic, "negotiated");

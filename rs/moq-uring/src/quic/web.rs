@@ -7,7 +7,7 @@
 //! selection) using [`web_transport_proto`]'s state machines, and
 //! [`Request::respond`] yields a [`Session`].
 //!
-//! [`Session`] is the one transport type the worker's runtime drives:
+//! [`Session`] supports both raw QUIC and WebTransport on the worker:
 //! [`Session::raw`] wraps a raw-QUIC connection in the same type with the
 //! WebTransport layering disabled, so native peers and browsers run the same
 //! machinery. Stream and session error codes map through the HTTP/3 error
@@ -419,7 +419,7 @@ struct State {
 
 /// A MoQ transport over the worker: raw QUIC, or a WebTransport session.
 ///
-/// The runtime's one transport type. [`Request::respond`] builds the web
+/// [`Request::respond`] builds the web
 /// flavor; [`Session::raw`] wraps a raw-QUIC [`Connection`] with the layering
 /// disabled. Clones share the session.
 pub struct Session {
@@ -431,7 +431,7 @@ pub struct Session {
 }
 
 impl Session {
-	/// Wrap a raw-QUIC connection in the runtime's transport type, with no
+	/// Wrap a raw-QUIC connection in a session, with no
 	/// WebTransport layering: streams and datagrams pass through untouched.
 	pub fn raw(conn: Connection) -> Self {
 		let protocol = web_transport_trait::poll::Session::protocol(&conn).map(str::to_owned);

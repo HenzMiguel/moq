@@ -172,11 +172,12 @@ mod linux {
 				let conn = quic::server::accept(&server_handle, server_sock, &server_config)
 					.await
 					.expect("quic accept");
-				let session = moq_net::Server::new()
+				let (session, driver) = moq_net::Server::new()
 					.with_publisher(&pub_origin)
 					.accept_lite(server_handle.clone(), quic::web::Session::raw(conn))
 					.await
 					.expect("accept_lite");
+				let _ = driver.await;
 				session.closed().await;
 			});
 
@@ -186,11 +187,14 @@ mod linux {
 					let conn = quic::client::connect(&handle, client_sock, &dial)
 						.await
 						.expect("quic connect");
-					let session = moq_net::Client::new()
+					let (session, driver) = moq_net::Client::new()
 						.with_subscriber(sub_origin.clone())
 						.connect_lite(handle.clone(), quic::web::Session::raw(conn))
 						.await
 						.expect("connect_lite");
+					handle.spawn(async move {
+						let _ = driver.await;
+					});
 					let bc = {
 						let consumer = sub_origin.consume();
 						consumer.routed("bench").await.expect("broadcast announced");

@@ -47,15 +47,15 @@
 //! last producer signals consumers that no more updates are coming.
 //!
 //! ## Async
-//! This library is async-first, but it never spawns onto a global executor and
-//! never reaches for ambient state. [`Client::connect`] and [`Server::accept`]
-//! take a [`Runtime`], which supplies the two things a session cannot do alone:
-//! run its protocol [`runtime::Machine`] to completion and arm its timers. The
-//! machine holds no session handle, so the transport still closes when the last
-//! [`Session`] clone drops (or on [`Session::abort`]), which in turn finishes
-//! the machine. Each transport ships its runtime (`moq-tokio`, `moq-wasm`, a
-//! thread-per-core io_uring runtime), and `runtime::Test` is the
-//! deterministic one for tests; see the [`runtime`] module.
+//! This library never spawns tasks. [`Client::connect`] and [`Server::accept`]
+//! take [`Timers`] and return a `(Session, Driver)` pair. Poll or spawn the
+//! [`Driver`] to run the session. It holds no session handle, so dropping the
+//! last [`Session`] clone requests transport closure and lets the driver finish.
+//! Dropping the driver cancels the session instead.
+//!
+//! `moq-tokio` and `moq-wasm` supply timers and spawn drivers for their callers.
+//! Direct callers can use any executor, including a thread-local executor for
+//! `!Send` transports. `runtime::Test` (feature `test-runtime`) supplies virtual time for tests.
 //!
 //! Origins follow the caller-driven pattern: [`origin::Producer::new`] returns a
 //! `(Producer, Driver)` pair, [`origin::Driver::run`] takes the [`Timers`] the
@@ -68,7 +68,7 @@
 //! (plain [`std::task::Waker`] plumbing) and `futures`, so any executor can poll
 //! them, and the `poll_xxx` counterparts can be stepped synchronously with a
 //! [`kio::Waiter`]. Purely model-layer methods (tracks, groups, frames,
-//! origins) never arm a timer and need no [`Runtime`] at all; they read the
+//! origins) never arm a timer and need no [`Timers`] at all; they read the
 //! crate's ambient clock for passive stamps (arrival times, cache ticks).
 
 #![warn(missing_docs)]
@@ -79,6 +79,7 @@
 
 mod client;
 mod coding;
+mod driver;
 mod error;
 pub mod goaway;
 // Not part of the public API: compiled only for the crate's own tests and for the
@@ -103,6 +104,7 @@ pub mod transport;
 
 pub use client::*;
 pub use coding::{BoundsExceeded, DecodeError, EncodeError, VarInt};
+pub use driver::Driver;
 pub use error::*;
 /// The session direction a client advertises in its SETUP (moq-lite-05+).
 pub use lite::Role;
@@ -110,7 +112,7 @@ pub use model::*;
 pub use path::{
 	AsPath, InvalidPattern, Path, PathOwned, PathPrefixes, PathRelative, PathRelativeOwned, Pattern, Patterns,
 };
-pub use runtime::{Runtime, Timers};
+pub use runtime::Timers;
 pub use server::Server;
 pub use session::Session;
 pub use version::*;

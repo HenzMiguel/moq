@@ -382,7 +382,7 @@ struct Advertised {
 }
 
 #[derive(Clone)]
-pub(super) struct Subscriber<S: crate::transport::poll::Session, R: crate::runtime::Runtime> {
+pub(super) struct Subscriber<S: crate::transport::poll::Session, R: crate::runtime::Timers> {
 	// Arms the track-alias and request-id timeouts.
 	runtime: R,
 	session: S,
@@ -421,7 +421,7 @@ pub(super) struct Subscriber<S: crate::transport::poll::Session, R: crate::runti
 /// seen is worth waiting on briefly (draft-19 section 11.4.2). Three outcomes:
 /// the subscription, [`Error::Cancel`] for an alias we retired, and [`Error::NotFound`]
 /// once the wait expires without any binding at all.
-async fn resolve_track_alias<R: crate::runtime::Runtime>(
+async fn resolve_track_alias<R: crate::runtime::Timers>(
 	runtime: &R,
 	aliases: kio::Consumer<AliasTable>,
 	alias: u64,
@@ -450,7 +450,7 @@ async fn resolve_track_alias<R: crate::runtime::Runtime>(
 impl<S, R> Subscriber<S, R>
 where
 	S: crate::transport::poll::Boxable,
-	R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
 	#[allow(clippy::too_many_arguments)]
@@ -2131,7 +2131,7 @@ where
 impl<S, R> Subscriber<S, R>
 where
 	S: crate::transport::poll::Boxable,
-	R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
 	/// The group producer this subgroup stream writes into, and the Object ID it starts at.
@@ -2281,7 +2281,7 @@ impl GroupIngest {
 impl<S, R> Subscriber<S, R>
 where
 	S: crate::transport::poll::Boxable,
-	R: crate::runtime::Runtime + MaybeSend + MaybeSync + 'static,
+	R: crate::runtime::Timers + MaybeSend + MaybeSync + 'static,
 	R::Timer: MaybeSend,
 {
 	/// Read a fill fetch stream: the head of the group a subscription joins part way through.
@@ -2765,7 +2765,7 @@ mod tests {
 
 	/// The tokio-backed test runtime. Its transport parameter is phantom, so one
 	/// type serves every fake session in this module.
-	type TestRuntime = crate::runtime::tokio_test::Tokio<crate::lite::test_transport::SinkSession>;
+	type TestRuntime = crate::runtime::tokio_test::Tokio;
 
 	#[tokio::test(start_paused = true)]
 	async fn track_alias_waits_for_control_message() {
@@ -5354,7 +5354,7 @@ mod stitch_tests {
 		util::{TaskSet, Tasks},
 	};
 
-	type TestRuntime = crate::runtime::tokio_test::Tokio<ScriptedSession>;
+	type TestRuntime = crate::runtime::tokio_test::Tokio;
 
 	const VERSION: Version = Version::Draft20;
 	const ALIAS: u64 = 7;
@@ -5989,7 +5989,7 @@ mod joining_fetch_tests {
 		util::{TaskSet, Tasks},
 	};
 
-	type TestRuntime = crate::runtime::tokio_test::Tokio<ScriptedSession>;
+	type TestRuntime = crate::runtime::tokio_test::Tokio;
 
 	const JOINING_DRAFTS: [Version; 6] = [
 		Version::Draft14,

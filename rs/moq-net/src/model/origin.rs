@@ -4104,7 +4104,7 @@ impl ProduceTest for Config {
 	fn produce(self) -> Producer {
 		let (producer, driver) = Producer::new(self);
 		if tokio::runtime::Handle::try_current().is_ok() {
-			web_async::spawn(driver.run(crate::runtime::tokio_test::Tokio::<()>::new()));
+			web_async::spawn(driver.run(crate::runtime::tokio_test::Tokio::new()));
 		} else {
 			// A sync test: nothing polls the driver, and dropping it would tear
 			// the origin down, so leak it and rely on the synchronous half.
@@ -5314,7 +5314,7 @@ mod tests {
 	async fn driver_resolves_with_live_consumers() {
 		let (producer, driver) = Producer::new(Config::new(origin(1)));
 		let consumer = producer.consume();
-		let run = driver.run(crate::runtime::tokio_test::Tokio::<()>::new());
+		let run = driver.run(crate::runtime::tokio_test::Tokio::new());
 		drop(producer);
 		tokio::time::timeout(Duration::from_secs(5), run)
 			.await

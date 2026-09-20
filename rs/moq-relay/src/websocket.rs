@@ -175,14 +175,13 @@ where
 	if let Some(publish) = publish {
 		server = server.with_subscriber(publish);
 	}
-	// Hold the session so it doesn't close early; the machine serves it in place
-	// (an Inline runtime hands it back instead of spawning), so its lifetime and
-	// teardown stay tied to this handler task.
-	let runtime = moq_tokio::runtime::Inline::new();
-	let session = server
-		.accept(runtime.clone(), moq_tokio::transport::Session::new(ws))
+	// Keep the driver in this task so cancellation tears down the transport.
+	let (session, mut driver) = server
+		.accept(
+			moq_tokio::runtime::Runtime::new(),
+			moq_tokio::transport::Session::new(ws),
+		)
 		.await?;
-	let mut driver = runtime.take().expect("accept hands the machine to its runtime");
 
 	// The handshake is done, so this is a MoQ session now: only now can a push
 	// be serviced, and only now does the session appear in the live table.

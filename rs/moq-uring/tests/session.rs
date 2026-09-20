@@ -92,11 +92,12 @@ fn lite_session_over_the_worker() {
 		let conn = quic::server::accept(&server_handle, server_sock, &server_config)
 			.await
 			.expect("quic accept");
-		let session = moq_net::Server::new()
+		let (session, driver) = moq_net::Server::new()
 			.with_publisher(&pub_origin)
 			.accept_lite(server_handle.clone(), quic::web::Session::raw(conn))
 			.await
 			.expect("accept_lite");
+		let _ = driver.await;
 		// Serve until the client walks away.
 		session.closed().await;
 	});
@@ -113,11 +114,14 @@ fn lite_session_over_the_worker() {
 				"negotiated ALPN"
 			);
 
-			let session = moq_net::Client::new()
+			let (session, driver) = moq_net::Client::new()
 				.with_subscriber(sub.clone())
 				.connect_lite(handle.clone(), quic::web::Session::raw(conn))
 				.await
 				.expect("connect_lite");
+			handle.spawn(async move {
+				let _ = driver.await;
+			});
 
 			let bc = {
 				let consumer = sub.consume();
@@ -209,11 +213,12 @@ fn two_lite_sessions_share_the_server_socket() {
 			let pub_origin = pub_origin.clone();
 			let session_handle = server_handle.clone();
 			server_handle.spawn(async move {
-				let session = moq_net::Server::new()
+				let (session, driver) = moq_net::Server::new()
 					.with_publisher(&pub_origin)
 					.accept_lite(session_handle, quic::web::Session::raw(conn))
 					.await
 					.expect("accept_lite");
+				let _ = driver.await;
 				session.closed().await;
 			});
 		}
@@ -233,11 +238,14 @@ fn two_lite_sessions_share_the_server_socket() {
 				let conn = quic::client::connect(&handle, client_sock, &dial)
 					.await
 					.expect("quic connect");
-				let session = moq_net::Client::new()
+				let (session, driver) = moq_net::Client::new()
 					.with_subscriber(sub.clone())
 					.connect_lite(handle.clone(), quic::web::Session::raw(conn))
 					.await
 					.expect("connect_lite");
+				handle.spawn(async move {
+					let _ = driver.await;
+				});
 
 				let bc = {
 					let consumer = sub.consume();

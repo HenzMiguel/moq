@@ -1146,7 +1146,7 @@ fn spawn_stream_request(
 /// every transport before the caller authorizes. The variant only distinguishes the
 /// underlying session type; all of them delegate identically.
 /// A pending moq-net request over transport `S`, driven by our tokio runtime.
-type PendingRequest<S> = moq_net::server::Handshake<S, crate::runtime::Runtime<S>>;
+type PendingRequest<S> = moq_net::server::Handshake<S, crate::runtime::Runtime>;
 
 pub(crate) enum RequestKind {
 	#[cfg(feature = "noq")]
@@ -1404,7 +1404,12 @@ impl Request {
 
 	/// Accept the session, starting the MoQ session loops.
 	pub async fn ok(self) -> crate::Result<Session> {
-		Ok(request_into!(self.kind, request => request.ok().await?))
+		Ok(request_into!(self.kind, request => {
+			let (session, driver) = request.ok().await?;
+			use tracing::Instrument;
+			tokio::spawn(driver.instrument(tracing::Span::current()));
+			session
+		}))
 	}
 
 	/// Returns the network transport carrying this session.

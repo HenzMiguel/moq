@@ -24,7 +24,7 @@ above ([hang](/lib/rs/hang)); relays and CDNs implement only this.
 - **Routes** record the relay hops and a cost, which is what the relay [cluster](/bin/relay/cluster) routes on. A hop of 0 marks the chain anonymous: `Route::is_anonymous()` is true, and that route ranks below every fully identified one.
 - **Stats** counters per broadcast and session, drained by [`moq-stats`](https://docs.rs/moq-stats).
 
-It runs over anything implementing `web_transport_trait::Session`: quinn,
+It runs over anything implementing `web_transport_trait::poll::Session`: quinn,
 quiche, noq, the browser, iroh, or qmux over TCP, Unix sockets, and
 WebSockets. [`moq-tokio`](https://docs.rs/moq-tokio) wires those up.
 
@@ -36,6 +36,29 @@ See the [Rust quick start](/lib/rs/#quick-start) and
 [docs.rs/moq-net](https://docs.rs/moq-net). The TypeScript twin is
 [`@moq/net`](/lib/js/net). The [path pattern](/concept/moq-lite#path-patterns)
 grammar lives on the concept page.
+
+## Driving sessions
+
+`Client::connect(timers, transport)`, `Server::accept(timers, transport)`, and
+`server::Handshake::ok()` return `(Session, Driver)`. The lite-only entry points
+return the same pair. `moq-net` never spawns tasks: poll or spawn the driver to
+run the protocol, process close requests, and update session statistics.
+
+```rust
+let (session, driver) = client
+    .connect(moq_tokio::runtime::Runtime::new(), transport)
+    .await?;
+tokio::spawn(driver);
+```
+
+Dropping the last session handle requests closure when the driver next runs.
+Dropping the driver cancels the session. Keep both alive while using the
+connection. `moq-tokio` and `moq-wasm` spawn the drivers for their callers.
+
+`Timers` supplies a clock and re-armable timers independently of the transport
+and executor. `runtime::Test` (feature `test-runtime`) provides virtual time;
+tests advance its clock and poll their drivers explicitly. The lite-only path
+also supports native `!Send` transports when driven on their owning thread.
 
 ## Patterns
 
