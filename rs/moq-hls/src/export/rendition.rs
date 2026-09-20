@@ -1,6 +1,7 @@
 //! One rendition: playlists from its timeline track, segments fetched on demand.
 
 use std::sync::Arc;
+use std::task::Poll;
 use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
@@ -179,7 +180,12 @@ impl Rendition {
 	/// would return `Some`. Bounding the wait is the caller's policy (the serve path wraps this
 	/// in its own timeout).
 	pub async fn playable(&self) {
-		kio::wait(|waiter| self.live.poll_playable(waiter)).await;
+		kio::wait(|waiter| self.poll_playable(waiter)).await;
+	}
+
+	/// Poll until this rendition has a renderable media playlist.
+	pub(crate) fn poll_playable(&self, waiter: &kio::Waiter) -> Poll<()> {
+		self.live.poll_playable(waiter)
 	}
 
 	/// Render this rendition's media playlist from the current timeline window, or `None` when
