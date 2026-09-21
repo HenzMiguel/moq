@@ -88,7 +88,6 @@ do not add another media abstraction or a renderer crate during stabilization.
 
 ## Quests
 
-- [E2EE path](/quest/m0/e2ee-path.md) - align the unpublished path derivation and vectors before the core adopts them
 - [E2EE API](/quest/m0/e2ee-api.md) - epoch-scoped ownership replaces raw crypto, catalog helpers, and process-global claims
 - [Socket group](/quest/m0/sock-group.md) - complete formation and retained sockets precede usable serving handles
 - [uring identity](/quest/m0/uring-identity.md) - sockets and connections carry their worker and steering identity

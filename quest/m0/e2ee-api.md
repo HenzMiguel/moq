@@ -12,7 +12,7 @@ status separately before replacing a wire profile.
 ## Plan
 
 - Replace `Credential::new(profile, context, generation, kid, secret)` with `Credential::new(Config { context, kid, secret })`, accepting an application-owned 32-byte secret. Remove `Credential::generate`: it hides the generated secret and cannot provision another process or device. Drop `profile`, `Pin`, `check_pin`, `prk_bytes`, `name_info`, `key_info`, and `key_bytes` from the public surface; the crate is the profile and the vectors run in-crate.
-- Add `Credential::path(semantic) -> Path`, the epoch-free opaque broadcast name from [Opaque broadcast path](/quest/m0/e2ee-path.md), and `Generation` from `credential.generation(epoch)`. It owns `name(semantic) -> Name`, `produce(moq_net::track::Producer) -> track::Producer`, `consume(moq_net::track::Subscriber) -> track::Consumer`, and `Epoch::mint()` returning a lowercase UUIDv7 via the `uuid` crate (`v7` feature, added to `[workspace.dependencies]`). `Name` replaces `PhysicalName`; `Epoch` is a validated path segment (nonempty, no `/`, at most 65535 bytes).
+- Add `Credential::path(semantic) -> Path`, the profile's epoch-free opaque broadcast name, and `Generation` from `credential.generation(epoch)`. It owns `name(semantic) -> Name`, `produce(moq_net::track::Producer) -> track::Producer`, `consume(moq_net::track::Subscriber) -> track::Consumer`, and `Epoch::mint()` returning a lowercase UUIDv7 via the `uuid` crate (`v7` feature, added to `[workspace.dependencies]`). `Name` replaces `PhysicalName`; `Epoch` is a validated path segment (nonempty, no `/`, at most 65535 bytes).
 - Delete `Publication` and its process-global generation set, `retransmit_datagram`, `datagram_ciphertext`, `group::Producer::ciphertext`, the producer-side datagram retention map, `GroupWindow`, `set_subscribe`, `datagram_payload_limit`, `varint_len`, and the `catalog` module. Keep `TrackKey`, `protect`, `open`, and `nonce` crate-private.
 - Clones of a generation share per-track publication claims. Reopening the same physical track must not reset its nonce counters; mint a fresh epoch for a new publisher instance. Keep this state inside the generation, never in a process-global registry.
 - `track::Producer` allocates sequences monotonically and refuses `create_group` or `insert_datagram` below the next sequence with `Reuse` within the claimed track. Frames are numbered by write order. The datagram plaintext cap is the constant `MAX_DATAGRAM_PLAINTEXT` (1160).
@@ -27,10 +27,6 @@ ciphertext compatibility. Do not describe this as no wire change merely
 because the target draft already exists. Verify publication status before
 implementation and preserve any actually published profile as required by
 the repository's wire-compatibility rule.
-
-## Required
-
-- [Opaque broadcast path](/quest/m0/e2ee-path.md) - settles the path derivation and vectors this crate implements
 
 ## Related
 
