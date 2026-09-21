@@ -102,7 +102,6 @@ do not add another media abstraction or a renderer crate during stabilization.
 - [NVENC resources](/quest/m0/nvenc-resources.md) - a small safe facade retains submitted resources through completion
 - [NVENC loading](/quest/m0/nvenc-loading.md) - unavailable or incompatible drivers return errors instead of panicking
 - [Codec threads](/quest/m0/video-thread-ownership.md) - synchronous codec handles cannot escape their owning thread
-- [Media features](/quest/m0/media-features.md) - OpenH264 can be excluded, rendering is opt-in, and feature aliases disappear
 - [Shared rate policy](/quest/m0/media-rate-policy.md) - the planned public namespace move happens before 0.1
 - [Audio configuration](/quest/m0/audio-config.md) - PCM layout, codec settings, and subscription policy have distinct contracts
 - [Audio publication](/quest/m0/audio-publication.md) - callers get demand authority and supported options, not internal transport or resampler machinery
