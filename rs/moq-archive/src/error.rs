@@ -38,8 +38,8 @@ pub enum Error {
 	#[error("group sequences are not strictly ascending")]
 	Sequence,
 
-	/// A range object's table does not match its filename bounds.
-	#[error("table bounds {smallest}..={largest} do not match the key")]
+	/// A group range is empty, reversed, or does not match an object's table.
+	#[error("invalid or mismatched group bounds {smallest}..={largest}")]
 	Bounds { smallest: u64, largest: u64 },
 
 	/// The binary table is truncated, overlapping, gapped, or out of range.

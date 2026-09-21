@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use bytes::Bytes;
 use futures::StreamExt;
 use futures::stream::BoxStream;
@@ -120,16 +122,15 @@ impl<T: ObjectStore> Store<T> {
 
 	/// Create a range-named groups object. A collision is accepted only when the bytes match.
 	pub async fn put_groups(&self, track: &str, object: &Object) -> Result<Key> {
-		let (smallest, largest) = object.bounds()?;
-		let key = Key::groups(track, largest, smallest)?;
+		let key = Key::groups(track, object.bounds()?)?;
 		self.put_segment(&key, object.encode()?).await?;
 		Ok(key)
 	}
 
 	/// Fetch a groups object and require its table to match the filename bounds.
-	pub async fn get_groups(&self, track: &str, largest: u64, smallest: u64) -> Result<Object> {
-		let path = self.path(&Key::groups(track, largest, smallest)?)?;
-		Object::decode_groups(self.get_bytes(&path).await?, largest, smallest)
+	pub async fn get_groups(&self, track: &str, range: RangeInclusive<u64>) -> Result<Object> {
+		let path = self.path(&Key::groups(track, range.clone())?)?;
+		Object::decode_groups(self.get_bytes(&path).await?, range)
 	}
 
 	/// Create a timeline object at `segments/<segment>`. A collision is accepted only when the bytes match.
@@ -349,13 +350,14 @@ mod tests {
 	async fn groups_put_get_and_identical_collision() {
 		let store = memory();
 		let object = two_groups();
+		let range = object.bounds().unwrap();
 		let key = store.put_groups("video", &object).await.unwrap();
-		assert_eq!(key, Key::groups("video", 7, 5).unwrap());
+		assert_eq!(key, Key::groups("video", range.clone()).unwrap());
 		assert_eq!(
 			store.path(&key).unwrap().as_ref(),
 			"rec/video/groups/0000000000000000007.0000000000000000005"
 		);
-		assert_eq!(store.get_groups("video", 7, 5).await.unwrap(), object);
+		assert_eq!(store.get_groups("video", range).await.unwrap(), object);
 		store.put_groups("video", &object).await.unwrap();
 	}
 
@@ -410,8 +412,8 @@ mod tests {
 			vec![
 				Key::segments("timeline.z", 2).unwrap(),
 				Key::info("video").unwrap(),
-				Key::groups("video", 1, 1).unwrap(),
-				Key::groups("video", 3, 3).unwrap(),
+				Key::groups("video", 1..=1).unwrap(),
+				Key::groups("video", 3..=3).unwrap(),
 			]
 		);
 	}
@@ -457,7 +459,7 @@ mod tests {
 		let object = one_group(ID_MAX, b"z");
 		store.put_groups("v", &object).await.unwrap();
 		store.put_segments("t", ID_MAX, &object).await.unwrap();
-		assert_eq!(store.get_groups("v", ID_MAX, ID_MAX).await.unwrap(), object);
+		assert_eq!(store.get_groups("v", ID_MAX..=ID_MAX).await.unwrap(), object);
 		assert_eq!(store.get_segments("t", ID_MAX).await.unwrap(), object);
 	}
 
@@ -471,6 +473,6 @@ mod tests {
 		let object = two_groups();
 		store.put_groups("audio", &object).await.unwrap();
 		assert_eq!(store.get_info("audio").await.unwrap(), info);
-		assert_eq!(store.get_groups("audio", 7, 5).await.unwrap(), object);
+		assert_eq!(store.get_groups("audio", 5..=7).await.unwrap(), object);
 	}
 }

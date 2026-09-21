@@ -1,3 +1,5 @@
+use std::ops::RangeInclusive;
+
 use object_store::path::{Path, PathPart};
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
 
@@ -58,10 +60,8 @@ pub enum Key {
 	Groups {
 		/// The unencoded track name.
 		track: String,
-		/// Inclusive last group sequence in the object.
-		largest: u64,
-		/// Inclusive first group sequence in the object.
-		smallest: u64,
+		/// Inclusive group sequences in the object, from first to last.
+		range: RangeInclusive<u64>,
 	},
 	/// `<encoded-track>/segments/<segment>`
 	Segments {
@@ -80,20 +80,12 @@ impl Key {
 		Ok(Self::Info { track })
 	}
 
-	/// A range-named groups object. `largest` is the last sequence, `smallest` the first.
-	pub fn groups(track: impl Into<String>, largest: u64, smallest: u64) -> Result<Self> {
+	/// A groups object named by its inclusive first-to-last sequence range.
+	pub fn groups(track: impl Into<String>, range: RangeInclusive<u64>) -> Result<Self> {
 		let track = track.into();
 		encode_track(&track)?;
-		check_id(largest)?;
-		check_id(smallest)?;
-		if largest < smallest {
-			return Err(Error::Bounds { smallest, largest });
-		}
-		Ok(Self::Groups {
-			track,
-			largest,
-			smallest,
-		})
+		check_range(&range)?;
+		Ok(Self::Groups { track, range })
 	}
 
 	/// A timeline object at `segments/<segment>`.
@@ -116,9 +108,9 @@ impl Key {
 		let path = push(prefix, &encode_track(self.track())?)?;
 		match self {
 			Self::Info { .. } => push(&path, ".info"),
-			Self::Groups { largest, smallest, .. } => {
+			Self::Groups { range, .. } => {
 				let path = push(&path, "groups")?;
-				push(&path, &range_name(*largest, *smallest)?)
+				push(&path, &range_name(range)?)
 			}
 			Self::Segments { segment, .. } => {
 				let path = push(&path, "segments")?;
@@ -155,12 +147,8 @@ fn parse_parts<'a>(mut parts: impl Iterator<Item = PathPart<'a>>, location: &Pat
 			if parts.next().is_some() {
 				return Err(Error::Path(location.to_string()));
 			}
-			let (largest, smallest) = parse_range(name.as_ref())?;
-			Ok(Key::Groups {
-				track,
-				largest,
-				smallest,
-			})
+			let range = parse_range(name.as_ref())?;
+			Ok(Key::Groups { track, range })
 		}
 		"segments" => {
 			let name = parts.next().ok_or_else(|| Error::Path(location.to_string()))?;
@@ -199,11 +187,13 @@ pub(crate) fn push(base: &Path, segment: &str) -> Result<Path> {
 	Ok(base.clone().join(part))
 }
 
-fn range_name(largest: u64, smallest: u64) -> Result<String> {
+fn range_name(range: &RangeInclusive<u64>) -> Result<String> {
+	check_range(range)?;
+	let (smallest, largest) = (*range.start(), *range.end());
 	Ok(format!("{}.{}", format_id(largest)?, format_id(smallest)?))
 }
 
-fn parse_range(name: &str) -> Result<(u64, u64)> {
+fn parse_range(name: &str) -> Result<RangeInclusive<u64>> {
 	let (largest, smallest) = name.split_once('.').ok_or_else(|| Error::Path(name.to_string()))?;
 	if smallest.contains('.') {
 		return Err(Error::Path(name.to_string()));
@@ -213,7 +203,17 @@ fn parse_range(name: &str) -> Result<(u64, u64)> {
 	if largest < smallest {
 		return Err(Error::Bounds { smallest, largest });
 	}
-	Ok((largest, smallest))
+	Ok(smallest..=largest)
+}
+
+pub(crate) fn check_range(range: &RangeInclusive<u64>) -> Result<()> {
+	let (smallest, largest) = (*range.start(), *range.end());
+	check_id(smallest)?;
+	check_id(largest)?;
+	if range.is_empty() {
+		return Err(Error::Bounds { smallest, largest });
+	}
+	Ok(())
 }
 
 #[cfg(test)]
@@ -282,7 +282,7 @@ mod tests {
 		let prefix = Path::from("rec/1");
 		for key in [
 			Key::info("catalog.json").unwrap(),
-			Key::groups("video", 10, 5).unwrap(),
+			Key::groups("video", 5..=10).unwrap(),
 			Key::segments("timeline.z", 0).unwrap(),
 			Key::segments("timeline.z", ID_MAX).unwrap(),
 		] {
@@ -299,13 +299,54 @@ mod tests {
 
 	#[test]
 	fn inverted_range_is_rejected() {
+		let (smallest, largest) = (2, 1);
 		assert!(matches!(
-			Key::groups("v", 1, 2),
+			Key::groups("v", smallest..=largest),
 			Err(Error::Bounds {
 				smallest: 2,
 				largest: 1
 			})
 		));
+	}
+
+	#[test]
+	fn exhausted_range_is_rejected() {
+		let mut range = 1..=1;
+		assert_eq!(range.next(), Some(1));
+		assert!(matches!(Key::groups("v", range), Err(Error::Bounds { .. })));
+	}
+
+	#[test]
+	fn range_id_endpoints_are_valid() {
+		let key = Key::groups("v", 0..=ID_MAX).unwrap();
+		assert_eq!(
+			key.path(&Path::from("rec")).unwrap().as_ref(),
+			"rec/v/groups/0009007199254740991.0000000000000000000"
+		);
+		assert!(matches!(Key::groups("v", 0..=ID_MAX + 1), Err(Error::Id(_))));
+		assert!(matches!(Key::groups("v", ID_MAX + 1..=ID_MAX + 1), Err(Error::Id(_))));
+	}
+
+	#[test]
+	fn direct_inverted_range_is_rejected_when_serialized() {
+		let (smallest, largest) = (2, 1);
+		let key = Key::Groups {
+			track: "v".to_string(),
+			range: smallest..=largest,
+		};
+		assert!(matches!(
+			key.path(&Path::from("rec")),
+			Err(Error::Bounds {
+				smallest: 2,
+				largest: 1
+			})
+		));
+
+		let key = Key::Groups {
+			track: "v".to_string(),
+			range: 0..=ID_MAX + 1,
+		};
+		assert!(matches!(key.path(&Path::from("rec")), Err(Error::Id(_))));
 	}
 
 	#[test]
