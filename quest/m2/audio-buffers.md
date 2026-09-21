@@ -22,10 +22,6 @@ priming, DTX, partial packets, final padding, and discontinuities in CI regressi
 fixtures. Report measured changes without hard-coding machine-specific timing
 thresholds into unit tests. Public API and wire: unchanged.
 
-## Required
-
-- [Audio configuration](/quest/m0/audio-config.md) - optimize the settled PCM/codec boundary
-
 ## Related
 
 - [Audio quality](/quest/m2/audio-quality-harness/README.md) - end-to-end quality and latency evidence

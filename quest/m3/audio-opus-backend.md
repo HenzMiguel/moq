@@ -24,5 +24,4 @@ before a separately scoped backend implementation.
 
 ## Related
 
-- [Audio configuration](/quest/m0/audio-config.md) - stable settings and backend-selection boundary
 - [Audio quality](/quest/m2/audio-quality-harness/README.md) - shared measurement infrastructure

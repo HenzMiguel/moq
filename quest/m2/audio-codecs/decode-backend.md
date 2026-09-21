@@ -38,10 +38,6 @@ stats and `moq play` surface.
 
 The FFI does not expose `Kind` until a consumer asks.
 
-## Required
-
-- [Audio configuration](/quest/m0/audio-config.md) - stable decoder settings and selection entry points
-
 ## Related
 
 - [Layout](/quest/m2/audio-codecs/layout.md) - independent; the platform backends need both
