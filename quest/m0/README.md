@@ -93,7 +93,6 @@ do not add another media abstraction or a renderer crate during stabilization.
 - [Socket group](/quest/m0/sock-group.md) - complete formation and retained sockets precede usable serving handles
 - [uring identity](/quest/m0/uring-identity.md) - sockets and connections carry their worker and steering identity
 - [Archive ranges](/quest/m0/archive-ranges.md) - one finite inclusive range convention replaces reversed integer pairs
-- [Archive listing](/quest/m0/archive-listing.md) - one recording-scoped query exposes only supported listing behavior
 - [Vulkan/CUDA surfaces](/quest/m0/video-vulkan-cuda.md) - retain producer slots
   and synchronize GPU access safely across Vulkan and CUDA
 - [NVENC registration rollback](/quest/m0/nvenc-registration.md) - release resources when mapping fails after registration
