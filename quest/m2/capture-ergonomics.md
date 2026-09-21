@@ -23,11 +23,10 @@ validation already has its own quest.
 - **Mixing multiple audio devices.** One device, one track. A screen share
   wanting microphone plus system audio has no way to say so, which is exactly
   the combination the `System` source makes newly reachable.
-  Preserve m0's exclusive AEC microphone ownership and define clock alignment
+  Preserve exclusive AEC microphone ownership and define clock alignment
   before sharing processed microphone input.
 
 ## Related
 
 - [Capture format validation](/quest/m2/audio-capture-format.md) - independent validation work already scoped
-- [AEC ownership](/quest/m0/audio-aec.md) - one microphone per adaptive canceller
 - [Video timing](/quest/m0/video-timing.md) - the capture clock contract
