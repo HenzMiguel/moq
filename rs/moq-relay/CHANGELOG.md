@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0](https://github.com/moq-dev/moq/compare/moq-relay-v0.14.18...moq-relay-v0.15.0) - 2026-09-21
+
+### Added
+
+- *(gateway)* [**breaking**] align embedding APIs ([#3818](https://github.com/moq-dev/moq/pull/3818))
+- *(net)* [**breaking**] simplify origin scoping ([#3804](https://github.com/moq-dev/moq/pull/3804))
+- *(net)* [**breaking**] scope origins with any pattern union and report announce matches ([#3746](https://github.com/moq-dev/moq/pull/3746))
+- *(relay)* push a re-check to live sessions ([#3778](https://github.com/moq-dev/moq/pull/3778))
+- *(auth)* [**breaking**] one type per contract concept ([#3776](https://github.com/moq-dev/moq/pull/3776))
+- *(net)* [**breaking**] slim the moq-net public surface ([#3779](https://github.com/moq-dev/moq/pull/3779))
+- *(net)* [**breaking**] announce prefixes on every wire; consumers read paths ([#3770](https://github.com/moq-dev/moq/pull/3770))
+- *(tokio)* [**breaking**] settle moq-tokio names under their modules ([#3745](https://github.com/moq-dev/moq/pull/3745))
+- *(native)* default the QUIC backend to noq ([#3757](https://github.com/moq-dev/moq/pull/3757))
+
+### Fixed
+
+- *(ci)* repair nightly and meta-review failures ([#3799](https://github.com/moq-dev/moq/pull/3799))
+- *(auth)* end a session when a re-check no longer grants ([#3774](https://github.com/moq-dev/moq/pull/3774))
+- *(net)* drop origin source track when last reader leaves
+
+### Other
+
+- *(net)* [**breaking**] name path roles without new types ([#3826](https://github.com/moq-dev/moq/pull/3826))
+- *(net)* [**breaking**] return the next deadline from driver polls ([#3828](https://github.com/moq-dev/moq/pull/3828))
+- *(net)* [**breaking**] drive time and cache cleanup explicitly ([#3825](https://github.com/moq-dev/moq/pull/3825))
+- *(quic)* [**breaking**] keep only the noq backend ([#3811](https://github.com/moq-dev/moq/pull/3811))
+- *(tokio)* make API shapes type-safe ([#3816](https://github.com/moq-dev/moq/pull/3816))
+- *(relay)* route auth through admissions ([#3800](https://github.com/moq-dev/moq/pull/3800))
+- *(relay)* port the drills to moq-tokio and the closed-with-source semantics
+- Merge origin/main into dev
+
 ### Breaking
 
 - `serve` takes the node's `session::Registry`; `supervise` takes an optional `session::Registration` so a push can re-check the lease.

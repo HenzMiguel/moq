@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/moq-dev/moq/compare/moq-net-v0.2.22...moq-net-v0.3.0) - 2026-09-21
+
+### Added
+
+- *(net)* [**breaking**] simplify origin scoping ([#3804](https://github.com/moq-dev/moq/pull/3804))
+- *(net)* [**breaking**] scope origins with any pattern union and report announce matches ([#3746](https://github.com/moq-dev/moq/pull/3746))
+- *(net)* negotiate the cluster extension with HOP_ID ([#3747](https://github.com/moq-dev/moq/pull/3747))
+
+### Fixed
+
+- *(net)* retain spliced warm cache ([#3814](https://github.com/moq-dev/moq/pull/3814))
+- *(net)* wake the demand aggregate when its widest subscriber changes ([#3785](https://github.com/moq-dev/moq/pull/3785))
+
+### Other
+
+- *(net)* [**breaking**] name path roles without new types ([#3826](https://github.com/moq-dev/moq/pull/3826))
+- *(net)* [**breaking**] return the next deadline from driver polls ([#3828](https://github.com/moq-dev/moq/pull/3828))
+- *(net)* [**breaking**] drive time and cache cleanup explicitly ([#3825](https://github.com/moq-dev/moq/pull/3825))
+- *(net)* expose route cost fields ([#3802](https://github.com/moq-dev/moq/pull/3802))
+- *(net)* format the merged track test ([#3791](https://github.com/moq-dev/moq/pull/3791))
+- Merge remote-tracking branch 'origin/main' into dev
+
 ### Added
 
 - `group::Producer::used` waits until the group has a consumer, matching `unused`.

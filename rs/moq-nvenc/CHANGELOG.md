@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.6](https://github.com/moq-dev/moq/compare/moq-nvenc-v0.0.5...moq-nvenc-v0.0.6) - 2026-09-21
+
+### Added
+
+- [**breaking**] refuse released spellings and drop unused deprecated APIs ([#3719](https://github.com/moq-dev/moq/pull/3719))
+
 ## [0.0.5](https://github.com/moq-dev/moq/compare/moq-nvenc-v0.0.4...moq-nvenc-v0.0.5) - 2026-09-13
 
 ### Fixed
