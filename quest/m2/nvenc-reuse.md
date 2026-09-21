@@ -21,10 +21,6 @@ latency, throughput, allocations, and registration counts separately. No public
 pool controls are needed unless measurements establish a consumer requirement.
 Public API and wire: unchanged.
 
-## Required
-
-- [NVENC resources](/quest/m0/nvenc-resources.md) - reusable owned resources and completion contract
-
 ## Related
 
 - [Hardware validation](/quest/m4/video-hardware.md) - device-backed correctness evidence
