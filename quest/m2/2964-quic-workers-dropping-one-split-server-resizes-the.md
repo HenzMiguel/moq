@@ -13,12 +13,11 @@ have landed. Do not repeat
 that API redesign here. This follow-up replaces the worker's private lifetime
 bookkeeping with the hardened socket-group primitive after dev merges.
 
-Adopt the claims and complete-group ownership supplied by
-[Reuseport group formation](/quest/m0/sock-group.md). No member serves
-before the final bind and filter attachment, and every socket stays owned
-until serving has stopped for the group. Preserve the M1 owner, shutdown,
-failure propagation, and worker-local builder contract without another
-published signature change.
+Adopt moq-sock's claims and complete-group ownership. No member serves before
+the final bind and filter attachment, and every socket stays owned until
+serving has stopped for the group. Preserve the M1 owner, shutdown, failure
+propagation, and worker-local builder contract without another published
+signature change.
 
 Use Linux runtime regressions to exercise incomplete startup, a failed final
 bind, dropping an unused server handle, and a serving member completing or
@@ -32,7 +31,6 @@ both the M1 ownership proof and this integration are complete.
 
 ## Required
 
-- [Reuseport group formation](/quest/m0/sock-group.md) - complete formation and retained sockets in the shared primitive
 - [Merge dev](/quest/m1/merge-dev.md) - the released ownership surface is available on main
 
 ## Closes

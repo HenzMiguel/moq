@@ -90,7 +90,6 @@ do not add another media abstraction or a renderer crate during stabilization.
 
 - [E2EE path](/quest/m0/e2ee-path.md) - align the unpublished path derivation and vectors before the core adopts them
 - [E2EE API](/quest/m0/e2ee-api.md) - epoch-scoped ownership replaces raw crypto, catalog helpers, and process-global claims
-- [Socket group](/quest/m0/sock-group.md) - complete formation and retained sockets precede usable serving handles
 - [uring identity](/quest/m0/uring-identity.md) - sockets and connections carry their worker and steering identity
 - [Archive ranges](/quest/m0/archive-ranges.md) - one finite inclusive range convention replaces reversed integer pairs
 - [Archive listing](/quest/m0/archive-listing.md) - one recording-scoped query exposes only supported listing behavior

@@ -86,7 +86,6 @@ Public API: none beyond the required quests. Wire: none.
 
 - [E2EE path](/quest/m0/e2ee-path.md) - settle the unpublished opaque path derivation and vectors
 - [E2EE API](/quest/m0/e2ee-api.md) - expose epoch-scoped ownership and align the implemented profile
-- [Socket group](/quest/m0/sock-group.md) - make partial reuseport groups and early socket drops unrepresentable
 - [uring identity](/quest/m0/uring-identity.md) - bind sockets, connections, workers, and steering identity together
 - [Archive ranges](/quest/m0/archive-ranges.md) - use one validated inclusive range contract
 - [Archive listing](/quest/m0/archive-listing.md) - expose one recording-scoped listing query

@@ -108,7 +108,7 @@ pub struct Workers {
 	/// The reuseport group the workers bound into. Held for the group's
 	/// lifetime, because it is what holds the listen port against a second
 	/// group.
-	_group: moq_sock::shard::Group,
+	_group: moq_sock::shard::Bound,
 }
 
 impl Workers {
@@ -182,17 +182,27 @@ impl Workers {
 		// that already holds it), refuses a size the steering filter could not
 		// address, and hands out members in the order the kernel numbers them
 		// by.
-		let mut group = moq_sock::shard::Group::acquire(requested, config.count)
+		let mut forming = moq_sock::shard::Group::acquire(requested, config.count)
 			.with_context(|| format!("failed to take the reuseport group on {requested}"))?;
-		let count = group.count();
+		let count = forming.count();
 
-		let mut members = Vec::with_capacity(count as usize);
-		while let Some(member) = group.member() {
+		let mut claims = Vec::with_capacity(count as usize);
+		while let Some(member) = forming.member() {
 			let shard = member.shard();
-			let socket = member
+			let claim = member
 				.bind()
-				.with_context(|| format!("failed to bind worker {} on {}", shard.index(), group.addr()))?;
-			members.push(Member { shard, socket });
+				.with_context(|| format!("failed to bind worker {} on {}", shard.index(), forming.addr()))?;
+			claims.push(claim);
+		}
+		let mut group = forming
+			.complete(claims)
+			.context("failed to complete the reuseport group")?;
+		let mut members = Vec::with_capacity(count as usize);
+		while let Some(member) = group.member().context("failed to clone a reuseport member")? {
+			members.push(Member {
+				shard: member.shard(),
+				socket: member.into_inner(),
+			});
 		}
 		// Whatever the first member bound, which is the requested address unless
 		// it asked for an ephemeral port.

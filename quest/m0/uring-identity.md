@@ -34,10 +34,6 @@ published moq-tokio worker surface when migrating its internal plumbing.
 Public API: breaking construction/configuration changes in moq-uring 0.0.1
 and the shared moq-sock member integration. Wire: no format change.
 
-## Required
-
-- [Socket group](/quest/m0/sock-group.md) - supplies completed members with retained socket ownership
-
 ## Related
 
 - [Handshake cancellation](/quest/m2/uring-handshake-cancel.md) - cleanup during a suspended handshake without another API
