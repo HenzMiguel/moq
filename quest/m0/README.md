@@ -94,8 +94,6 @@ do not add another media abstraction or a renderer crate during stabilization.
 - [uring identity](/quest/m0/uring-identity.md) - sockets and connections carry their worker and steering identity
 - [Archive ranges](/quest/m0/archive-ranges.md) - one finite inclusive range convention replaces reversed integer pairs
 - [Archive listing](/quest/m0/archive-listing.md) - one recording-scoped query exposes only supported listing behavior
-- [Vulkan/CUDA surfaces](/quest/m0/video-vulkan-cuda.md) - retain producer slots
-  and synchronize GPU access safely across Vulkan and CUDA
 - [NVENC registration rollback](/quest/m0/nvenc-registration.md) - release resources when mapping fails after registration
 - [GPU conversion and NVENC](/quest/m0/video-gpu-encode.md) - convert, resize and
   encode imported frames without CPU pixel transfers or fallback
