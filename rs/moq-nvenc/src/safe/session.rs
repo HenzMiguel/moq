@@ -8,7 +8,6 @@
 use std::fmt::Debug;
 
 use super::{
-	api::ENCODE_API,
 	encoder::Encoder,
 	result::{EncodeError, ErrorKind},
 };
@@ -152,7 +151,7 @@ impl Session {
 		params.set_resetEncoder(0);
 		params.set_forceIDR(0);
 
-		unsafe { (ENCODE_API.reconfigure_encoder)(self.encoder.ptr, &mut params) }.result(&self.encoder)
+		unsafe { (self.encoder.api.reconfigure_encoder)(self.encoder.ptr, &mut params) }.result(&self.encoder)
 	}
 
 	/// Encode a frame.
@@ -277,7 +276,7 @@ impl Session {
 			},
 			..Default::default()
 		};
-		unsafe { (ENCODE_API.encode_picture)(self.encoder.ptr, &mut encode_pic_params) }.result(&self.encoder)
+		unsafe { (self.encoder.api.encode_picture)(self.encoder.ptr, &mut encode_pic_params) }.result(&self.encoder)
 	}
 
 	/// Send an EOS notifications to flush the encoder.
@@ -294,7 +293,7 @@ impl Session {
 	/// should retry after a few milliseconds.
 	pub fn end_of_stream(&self) -> Result<(), EncodeError> {
 		let mut encode_pic_params = NV_ENC_PIC_PARAMS::end_of_stream();
-		unsafe { (ENCODE_API.encode_picture)(self.encoder.ptr, &mut encode_pic_params) }.result(&self.encoder)
+		unsafe { (self.encoder.api.encode_picture)(self.encoder.ptr, &mut encode_pic_params) }.result(&self.encoder)
 	}
 }
 

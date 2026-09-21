@@ -4,7 +4,7 @@ use std::{ffi::c_void, ptr};
 
 use cudarc::driver::{DevicePtr, MappedBuffer};
 
-use super::{api::ENCODE_API, encoder::Encoder, result::EncodeError, session::Session};
+use super::{encoder::Encoder, result::EncodeError, session::Session};
 use crate::sys::nvEncodeAPI::{
 	NV_ENC_BUFFER_FORMAT, NV_ENC_CREATE_BITSTREAM_BUFFER, NV_ENC_CREATE_BITSTREAM_BUFFER_VER,
 	NV_ENC_CREATE_INPUT_BUFFER, NV_ENC_CREATE_INPUT_BUFFER_VER, NV_ENC_INPUT_RESOURCE_TYPE, NV_ENC_LOCK_BITSTREAM,
@@ -91,7 +91,7 @@ impl Session {
 			inputBuffer: ptr::null_mut(),
 			..Default::default()
 		};
-		unsafe { (ENCODE_API.create_input_buffer)(self.encoder.ptr, &mut create_input_buffer_params) }
+		unsafe { (self.encoder.api.create_input_buffer)(self.encoder.ptr, &mut create_input_buffer_params) }
 			.result(&self.encoder)?;
 		Ok(Buffer {
 			ptr: create_input_buffer_params.inputBuffer,
@@ -156,7 +156,7 @@ impl Session {
 			bitstreamBuffer: ptr::null_mut(),
 			..Default::default()
 		};
-		unsafe { (ENCODE_API.create_bitstream_buffer)(self.encoder.ptr, &mut create_bitstream_buffer_params) }
+		unsafe { (self.encoder.api.create_bitstream_buffer)(self.encoder.ptr, &mut create_bitstream_buffer_params) }
 			.result(&self.encoder)?;
 		Ok(Bitstream {
 			ptr: create_bitstream_buffer_params.bitstreamBuffer,
@@ -221,7 +221,7 @@ impl Session {
 			self.buffer_format,
 		)
 		.pitch(pitch);
-		unsafe { (ENCODE_API.register_resource)(self.encoder.ptr, &mut register_resource_params) }
+		unsafe { (self.encoder.api.register_resource)(self.encoder.ptr, &mut register_resource_params) }
 			.result(&self.encoder)?;
 		let registered_resource = register_resource_params.registeredResource;
 
@@ -233,7 +233,7 @@ impl Session {
 			mappedBufferFmt: NV_ENC_BUFFER_FORMAT::NV_ENC_BUFFER_FORMAT_UNDEFINED,
 			..Default::default()
 		};
-		unsafe { (ENCODE_API.map_input_resource)(self.encoder.ptr, &mut map_input_resource_params) }
+		unsafe { (self.encoder.api.map_input_resource)(self.encoder.ptr, &mut map_input_resource_params) }
 			.result(&self.encoder)?;
 
 		let mapped_resource = map_input_resource_params.mappedResource;
@@ -353,7 +353,7 @@ impl<'a> Buffer<'a> {
 		if !wait {
 			lock_input_buffer_params.set_doNotWait(1);
 		}
-		unsafe { (ENCODE_API.lock_input_buffer)(self.encoder.ptr, &mut lock_input_buffer_params) }
+		unsafe { (self.encoder.api.lock_input_buffer)(self.encoder.ptr, &mut lock_input_buffer_params) }
 			.result(self.encoder)?;
 
 		let data_ptr = lock_input_buffer_params.bufferDataPtr;
@@ -370,7 +370,7 @@ impl<'a> Buffer<'a> {
 
 impl Drop for Buffer<'_> {
 	fn drop(&mut self) {
-		unsafe { (ENCODE_API.destroy_input_buffer)(self.encoder.ptr, self.ptr) }
+		unsafe { (self.encoder.api.destroy_input_buffer)(self.encoder.ptr, self.ptr) }
 			.result(self.encoder)
 			.expect("The encoder and buffer pointers should be valid.");
 	}
@@ -457,7 +457,7 @@ impl BufferLock<'_, '_> {
 
 impl Drop for BufferLock<'_, '_> {
 	fn drop(&mut self) {
-		unsafe { (ENCODE_API.unlock_input_buffer)(self.buffer.encoder.ptr, self.buffer.ptr) }
+		unsafe { (self.buffer.encoder.api.unlock_input_buffer)(self.buffer.encoder.ptr, self.buffer.ptr) }
 			.result(self.buffer.encoder)
 			.expect("The encoder and buffer pointers should be valid.");
 	}
@@ -521,7 +521,7 @@ impl Bitstream<'_> {
 		if !wait {
 			lock_bitstream_buffer_params.set_doNotWait(1);
 		}
-		unsafe { (ENCODE_API.lock_bitstream)(self.encoder.ptr, &mut lock_bitstream_buffer_params) }
+		unsafe { (self.encoder.api.lock_bitstream)(self.encoder.ptr, &mut lock_bitstream_buffer_params) }
 			.result(self.encoder)?;
 
 		// Get data.
@@ -542,7 +542,7 @@ impl Bitstream<'_> {
 
 impl Drop for Bitstream<'_> {
 	fn drop(&mut self) {
-		unsafe { (ENCODE_API.destroy_bitstream_buffer)(self.encoder.ptr, self.ptr) }
+		unsafe { (self.encoder.api.destroy_bitstream_buffer)(self.encoder.ptr, self.ptr) }
 			.result(self.encoder)
 			.expect("The encoder and bitstream pointers should be valid.");
 	}
@@ -605,7 +605,7 @@ impl BitstreamLock<'_, '_> {
 
 impl Drop for BitstreamLock<'_, '_> {
 	fn drop(&mut self) {
-		unsafe { (ENCODE_API.unlock_bitstream)(self.bitstream.encoder.ptr, self.bitstream.ptr) }
+		unsafe { (self.bitstream.encoder.api.unlock_bitstream)(self.bitstream.encoder.ptr, self.bitstream.ptr) }
 			.result(self.bitstream.encoder)
 			.expect("The encoder and bitstream pointers should be valid.");
 	}
@@ -636,11 +636,11 @@ unsafe impl Send for RegisteredResource<'_, MappedBuffer> {}
 impl<T> Drop for RegisteredResource<'_, T> {
 	fn drop(&mut self) {
 		// Unmapping resource.
-		unsafe { (ENCODE_API.unmap_input_resource)(self.encoder.ptr, self.map_ptr) }
+		unsafe { (self.encoder.api.unmap_input_resource)(self.encoder.ptr, self.map_ptr) }
 			.result(self.encoder)
 			.expect("The encoder pointer and map handle should be valid.");
 		// Unregister resource.
-		unsafe { (ENCODE_API.unregister_resource)(self.encoder.ptr, self.reg_ptr) }
+		unsafe { (self.encoder.api.unregister_resource)(self.encoder.ptr, self.reg_ptr) }
 			.result(self.encoder)
 			.expect("The encoder pointer and resource handle should be valid.");
 	}

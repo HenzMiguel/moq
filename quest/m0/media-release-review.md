@@ -29,7 +29,6 @@ Public API/wire impact: review only.
 ## Required
 
 - [NVENC resources](/quest/m0/nvenc-resources.md) - safe ownership is enforced
-- [NVENC loading](/quest/m0/nvenc-loading.md) - driver refusal is fallible
 - [Codec threads](/quest/m0/video-thread-ownership.md) - direct handles have correct auto traits
 - [Media features](/quest/m0/media-features.md) - independent build choices work
 - [Shared rate policy](/quest/m0/media-rate-policy.md) - later adaptation will not remove a stabilized namespace
