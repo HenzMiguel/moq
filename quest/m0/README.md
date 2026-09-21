@@ -108,7 +108,6 @@ do not add another media abstraction or a renderer crate during stabilization.
 - [Audio publication](/quest/m0/audio-publication.md) - callers get demand authority and supported options, not internal transport or resampler machinery
 - [Remove ineffective FEC](/quest/m0/audio-fec.md) - no public flag promises redundancy the encoder never emits
 - [AEC ownership](/quest/m0/audio-aec.md) - one microphone owns an adaptive canceller and controls remain shareable
-- [Playback outcome](/quest/m0/audio-playback.md) - nonblocking writes report accepted and dropped audio
 - [Video output](/quest/m0/video-output.md) - codec output and subscription policy are separate, with native or CPU frames
 - [Video frames](/quest/m0/video-frames.md) - conversions preserve typed pixels and frame records can grow
 - [Video timing](/quest/m0/video-timing.md) - capture time and fractional frame rates survive capture, encoding, and transcode

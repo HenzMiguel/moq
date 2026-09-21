@@ -37,7 +37,6 @@ Public API/wire impact: review only.
 - [Audio publication](/quest/m0/audio-publication.md) - only intended authority is public
 - [Remove ineffective FEC](/quest/m0/audio-fec.md) - no unsupported promise remains
 - [AEC ownership](/quest/m0/audio-aec.md) - microphone attachment is exclusive
-- [Playback outcome](/quest/m0/audio-playback.md) - drops are observable
 - [Video output](/quest/m0/video-output.md) - output and subscription contracts are distinct
 - [Video frames](/quest/m0/video-frames.md) - pixels and extension points are typed
 - [Video timing](/quest/m0/video-timing.md) - timestamps and rates retain their meaning

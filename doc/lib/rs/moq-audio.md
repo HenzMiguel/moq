@@ -35,9 +35,15 @@ input.sample_rate = audio.sample_rate();
 input.channels = audio.channels();
 let mut sink = engine.sink(input)?;
 while let Some(frame) = audio.read().await? {
-    sink.write(&frame.data)?;
+    let write = sink.write(&frame.data)?;
+    if write.dropped_sample_frames > 0 {
+        eprintln!("dropped {} live audio frames", write.dropped_sample_frames);
+    }
 }
 ```
+
+Playback writes never block. Inspect the returned input sample-frame counts for
+telemetry, but do not retry dropped live audio because that would add latency.
 
 ```bash
 cargo add moq-audio --features playback                # decode and play the example above
