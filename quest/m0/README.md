@@ -96,7 +96,6 @@ do not add another media abstraction or a renderer crate during stabilization.
 - [Archive listing](/quest/m0/archive-listing.md) - one recording-scoped query exposes only supported listing behavior
 - [Vulkan/CUDA surfaces](/quest/m0/video-vulkan-cuda.md) - retain producer slots
   and synchronize GPU access safely across Vulkan and CUDA
-- [NVENC registration rollback](/quest/m0/nvenc-registration.md) - release resources when mapping fails after registration
 - [GPU conversion and NVENC](/quest/m0/video-gpu-encode.md) - convert, resize and
   encode imported frames without CPU pixel transfers or fallback
 - [NVENC resources](/quest/m0/nvenc-resources.md) - a small safe facade retains submitted resources through completion

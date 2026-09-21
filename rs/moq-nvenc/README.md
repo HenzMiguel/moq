@@ -17,6 +17,12 @@ C-ABI definitions and nothing links at build time. It only actually loads NVENC
 on Linux (that is the only place `moq-video` calls it); elsewhere it is a
 compile-only stub.
 
+External input registration is transactional. If NVENC registers an allocation
+but cannot map it, the safe wrapper unregisters it before releasing its owner.
+When rollback also fails, the mapping error remains primary, the unregister
+error is available through `EncodeError::cleanup`, and the allocation stays
+owned because the driver may still refer to it.
+
 The `sys` bindings are generated with bindgen from the vendored headers
 (`src/sys/headers/`); see the [upstream repo](https://github.com/ViliamVadocz/nvidia-video-codec-sdk)
 for the generation scripts.
