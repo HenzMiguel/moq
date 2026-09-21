@@ -63,8 +63,6 @@ the dev merge.
 
 - [Shared rate policy](/quest/m0/media-rate-policy.md) - namespace relocation is already complete
 - [Audio configuration](/quest/m0/audio-config.md) - the settled codec settings
-- [Audio publication](/quest/m0/audio-publication.md) - demand access without transport write authority
-
 - [Merge dev](/quest/m1/merge-dev.md) - builds on dev-only code that reaches `main` with the merge
 
 ## Closes
